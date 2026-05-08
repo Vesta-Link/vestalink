@@ -15,21 +15,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Solana, Anchor & Node.js
+        uses: solana-developers/github-actions/setup-all@v0.2.9
         with:
-          node-version: "20"
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-
-      - name: Setup Solana CLI
-        uses: metadaoproject/setup-solana@v1.2
-
-      - name: Setup Anchor CLI
-        uses: metadaoproject/setup-anchor@v1
+          solana_version: "2.1.21"
+          anchor_version: "0.32.1"
+          node_version: "20"
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
