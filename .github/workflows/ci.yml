@@ -15,6 +15,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.89.0
+
       - name: Setup Solana, Anchor & Node.js
         uses: solana-developers/github-actions/setup-all@v0.2.9
         with:
