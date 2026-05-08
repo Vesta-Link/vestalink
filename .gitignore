@@ -1,0 +1,16 @@
+# Anchor / Solana
+.anchor
+target/
+test-ledger/
+**/*.rs.bk
+
+# Node
+node_modules/
+.yarn/
+
+# OS
+.DS_Store
+
+# Environment
+.env
+.env.local

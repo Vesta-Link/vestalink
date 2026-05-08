@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contract
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Setup Solana CLI
+        uses: metadaoproject/setup-solana@v1.2
+
+      - name: Setup Anchor CLI
+        uses: metadaoproject/setup-anchor@v1
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build Anchor program
+        run: anchor build
+
+      - name: Run tests
+        run: anchor test
