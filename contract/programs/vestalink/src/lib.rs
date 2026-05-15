@@ -2,101 +2,170 @@ use anchor_lang::prelude::*;
 use anchor_lang::solana_program::clock::Clock;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
-declare_id!("6F7nCFLsZNgpVPjrGFdn5QhN3icbrnFbh9pingoiqi2E");
+declare_id!("F1vVgK28j53ydLtMJhL6c6Q7CizdEASEivN5bWwyzNtM");
 
 #[program]
 pub mod vestalink {
     use super::*;
 
+    pub fn create_stream(
+        ctx: Context<CreateVestingSchedule>,
+        params: CreateVestingParams,
+    ) -> Result<()> {
+        create_stream_impl(ctx, params)
+    }
+
     pub fn create_vesting_schedule(
         ctx: Context<CreateVestingSchedule>,
         params: CreateVestingParams,
     ) -> Result<()> {
-        // 1. Validate parameters
-        require!(params.total_amount > 0, VestingError::InvalidAmount);
-        require!(
-            params.start_time < params.end_time,
-            VestingError::InvalidTimeRange
-        );
-        require!(
-            params.vesting_type == VestingType::Linear,
-            VestingError::UnsupportedVestingType
-        );
-
-        // 2. Initialize VestingState account
-        let vesting_state = &mut ctx.accounts.vesting_state;
-        vesting_state.recipient = ctx.accounts.recipient.key();
-        vesting_state.funder = ctx.accounts.funder.key();
-        vesting_state.total_amount = params.total_amount;
-        vesting_state.claimed_amount = 0;
-        vesting_state.authority_revoker = ctx.accounts.funder.key();
-        vesting_state.authority_milestone = ctx.accounts.funder.key();
-        vesting_state.treasury_return_address = ctx.accounts.funder_token_account.key();
-        vesting_state.vesting_type = params.vesting_type;
-        vesting_state.is_revoked = false;
-        vesting_state.start_time = params.start_time;
-        vesting_state.end_time = params.end_time;
-        vesting_state.cliff_time = params.start_time; // Linear: no cliff, set to start_time
-        vesting_state.milestone_count = 0;
-        vesting_state.milestones_reached = 0;
-        vesting_state.bump = ctx.bumps.vesting_state;
-        vesting_state.nonce = params.nonce;
-
-        // 3. Transfer tokens from funder to PDA vault via CPI
-        let cpi_accounts = Transfer {
-            from: ctx.accounts.funder_token_account.to_account_info(),
-            to: ctx.accounts.vesting_token_account.to_account_info(),
-            authority: ctx.accounts.funder.to_account_info(),
-        };
-        let cpi_ctx = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts);
-        token::transfer(cpi_ctx, params.total_amount)?;
-
-        Ok(())
+        create_stream_impl(ctx, params)
     }
 
     pub fn unlock_milestone(_ctx: Context<UnlockMilestone>) -> Result<()> {
-        // Milestone vesting is not supported in this phase
         err!(VestingError::UnsupportedVestingType)
     }
 
-    pub fn claim(ctx: Context<Claim>) -> Result<()> {
-        let vesting_state = &ctx.accounts.vesting_state;
+    pub fn withdraw(ctx: Context<Withdraw>) -> Result<()> {
+        withdraw_impl(ctx)
+    }
 
-        // 1. Check stream is not revoked (also enforced by account constraint)
-        require!(!vesting_state.is_revoked, VestingError::StreamRevoked);
+    pub fn claim(ctx: Context<Withdraw>) -> Result<()> {
+        withdraw_impl(ctx)
+    }
 
-        // 2. Calculate unlocked amount using Clock sysvar
-        let current_time = Clock::get()?.unix_timestamp;
-        let unlocked_amount = calculate_unlocked(
-            vesting_state.total_amount,
-            vesting_state.start_time,
-            vesting_state.end_time,
-            current_time,
-        );
+    pub fn claim_tokens(ctx: Context<Withdraw>) -> Result<()> {
+        withdraw_impl(ctx)
+    }
 
-        // 3. Compute claimable amount
-        let claimable_amount = unlocked_amount
-            .checked_sub(vesting_state.claimed_amount)
-            .ok_or(VestingError::InsufficientUnlockedTokens)?;
+    pub fn revoke_vesting(ctx: Context<RevokeVesting>) -> Result<()> {
+        revoke_vesting_impl(ctx)
+    }
 
-        // 4. If claimable is 0, succeed as no-op
-        if claimable_amount == 0 {
-            return Ok(());
-        }
+    pub fn cancel_vesting(ctx: Context<RevokeVesting>) -> Result<()> {
+        revoke_vesting_impl(ctx)
+    }
+}
 
-        // 5. Transfer tokens from PDA vault to recipient via CPI (PDA signs)
-        let seeds = &[
-            b"vesting",
-            vesting_state.funder.as_ref(),
-            vesting_state.recipient.as_ref(),
-            &vesting_state.nonce.to_le_bytes(),
-            &[vesting_state.bump],
-        ];
-        let signer_seeds = &[&seeds[..]];
+fn create_stream_impl(
+    ctx: Context<CreateVestingSchedule>,
+    params: CreateVestingParams,
+) -> Result<()> {
+    require!(params.total_amount > 0, VestingError::InvalidAmount);
+    require!(
+        params.start_time < params.end_time,
+        VestingError::InvalidTimeRange
+    );
+    require!(
+        params.vesting_type == VestingType::Linear,
+        VestingError::UnsupportedVestingType
+    );
 
+    let vesting_state = &mut ctx.accounts.vesting_state;
+    vesting_state.recipient = ctx.accounts.recipient.key();
+    vesting_state.funder = ctx.accounts.funder.key();
+    vesting_state.total_amount = params.total_amount;
+    vesting_state.claimed_amount = 0;
+    vesting_state.authority_revoker = ctx.accounts.funder.key();
+    vesting_state.authority_milestone = ctx.accounts.funder.key();
+    vesting_state.treasury_return_address = ctx.accounts.funder_token_account.key();
+    vesting_state.vesting_type = params.vesting_type;
+    vesting_state.is_revoked = false;
+    vesting_state.start_time = params.start_time;
+    vesting_state.end_time = params.end_time;
+    vesting_state.cliff_time = params.start_time;
+    vesting_state.milestone_count = 0;
+    vesting_state.milestones_reached = 0;
+    vesting_state.bump = ctx.bumps.vesting_state;
+    vesting_state.nonce = params.nonce;
+    vesting_state.vested_amount_at_revocation = 0;
+
+    let cpi_accounts = Transfer {
+        from: ctx.accounts.funder_token_account.to_account_info(),
+        to: ctx.accounts.vesting_token_account.to_account_info(),
+        authority: ctx.accounts.funder.to_account_info(),
+    };
+    let cpi_ctx = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts);
+    token::transfer(cpi_ctx, params.total_amount)?;
+
+    Ok(())
+}
+
+fn withdraw_impl(ctx: Context<Withdraw>) -> Result<()> {
+    let vesting_state = &ctx.accounts.vesting_state;
+    let unlocked_amount = current_unlocked_amount(vesting_state)?;
+    let claimable_amount = unlocked_amount
+        .checked_sub(vesting_state.claimed_amount)
+        .ok_or(VestingError::InsufficientUnlockedTokens)?;
+
+    require!(
+        claimable_amount > 0,
+        VestingError::InsufficientUnlockedTokens
+    );
+
+    let nonce_bytes = vesting_state.nonce.to_le_bytes();
+    let bump = [vesting_state.bump];
+    let seeds = &[
+        b"vesting",
+        vesting_state.funder.as_ref(),
+        vesting_state.recipient.as_ref(),
+        &nonce_bytes,
+        &bump,
+    ];
+    let signer_seeds = &[&seeds[..]];
+
+    let cpi_accounts = Transfer {
+        from: ctx.accounts.vesting_token_account.to_account_info(),
+        to: ctx.accounts.recipient_token_account.to_account_info(),
+        authority: ctx.accounts.vesting_state.to_account_info(),
+    };
+    let cpi_ctx = CpiContext::new_with_signer(
+        ctx.accounts.token_program.to_account_info(),
+        cpi_accounts,
+        signer_seeds,
+    );
+    token::transfer(cpi_ctx, claimable_amount)?;
+
+    let vesting_state = &mut ctx.accounts.vesting_state;
+    vesting_state.claimed_amount = vesting_state
+        .claimed_amount
+        .checked_add(claimable_amount)
+        .ok_or(VestingError::ArithmeticOverflow)?;
+
+    Ok(())
+}
+
+fn revoke_vesting_impl(ctx: Context<RevokeVesting>) -> Result<()> {
+    let vesting_state = &ctx.accounts.vesting_state;
+    require!(!vesting_state.is_revoked, VestingError::StreamRevoked);
+
+    let current_time = Clock::get()?.unix_timestamp;
+    let unlocked_amount = calculate_unlocked(
+        vesting_state.total_amount,
+        vesting_state.start_time,
+        vesting_state.end_time,
+        current_time,
+    );
+    let unvested_amount = vesting_state
+        .total_amount
+        .checked_sub(unlocked_amount)
+        .ok_or(VestingError::ArithmeticOverflow)?;
+
+    let nonce_bytes = vesting_state.nonce.to_le_bytes();
+    let bump = [vesting_state.bump];
+    let seeds = &[
+        b"vesting",
+        vesting_state.funder.as_ref(),
+        vesting_state.recipient.as_ref(),
+        &nonce_bytes,
+        &bump,
+    ];
+    let signer_seeds = &[&seeds[..]];
+
+    if unvested_amount > 0 {
         let cpi_accounts = Transfer {
             from: ctx.accounts.vesting_token_account.to_account_info(),
-            to: ctx.accounts.recipient_token_account.to_account_info(),
+            to: ctx.accounts.treasury_return_address.to_account_info(),
             authority: ctx.accounts.vesting_state.to_account_info(),
         };
         let cpi_ctx = CpiContext::new_with_signer(
@@ -104,70 +173,33 @@ pub mod vestalink {
             cpi_accounts,
             signer_seeds,
         );
-        token::transfer(cpi_ctx, claimable_amount)?;
-
-        // 6. Update claimed_amount (mutable borrow after CPI)
-        let vesting_state = &mut ctx.accounts.vesting_state;
-        vesting_state.claimed_amount = vesting_state
-            .claimed_amount
-            .checked_add(claimable_amount)
-            .ok_or(VestingError::ArithmeticOverflow)?;
-
-        Ok(())
+        token::transfer(cpi_ctx, unvested_amount)?;
     }
 
-    pub fn cancel_vesting(ctx: Context<CancelVesting>) -> Result<()> {
-        let vesting_state = &ctx.accounts.vesting_state;
+    let vesting_state_mut = &mut ctx.accounts.vesting_state;
+    vesting_state_mut.is_revoked = true;
+    vesting_state_mut.vested_amount_at_revocation = unlocked_amount;
 
-        // 1. Calculate remaining unclaimed tokens
-        let remaining_amount = vesting_state
-            .total_amount
-            .checked_sub(vesting_state.claimed_amount)
-            .ok_or(VestingError::ArithmeticOverflow)?;
-
-        // Extract PDA seed data before mutable borrow
-        let funder = vesting_state.funder;
-        let recipient = vesting_state.recipient;
-        let nonce = vesting_state.nonce;
-        let bump = vesting_state.bump;
-
-        // 2. Mark as revoked
-        let vesting_state_mut = &mut ctx.accounts.vesting_state;
-        vesting_state_mut.is_revoked = true;
-
-        // 3. Transfer remaining tokens back to treasury via CPI (PDA signs)
-        if remaining_amount > 0 {
-            let seeds = &[
-                b"vesting",
-                funder.as_ref(),
-                recipient.as_ref(),
-                &nonce.to_le_bytes(),
-                &[bump],
-            ];
-            let signer_seeds = &[&seeds[..]];
-
-            let cpi_accounts = Transfer {
-                from: ctx.accounts.vesting_token_account.to_account_info(),
-                to: ctx.accounts.treasury_return_address.to_account_info(),
-                authority: ctx.accounts.vesting_state.to_account_info(),
-            };
-            let cpi_ctx = CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
-                cpi_accounts,
-                signer_seeds,
-            );
-            token::transfer(cpi_ctx, remaining_amount)?;
-        }
-
-        Ok(())
-    }
+    Ok(())
 }
 
-// ── Helper ──────────────────────────────────────────────────────────
+fn current_unlocked_amount(vesting_state: &VestingState) -> Result<u64> {
+    if vesting_state.is_revoked {
+        return Ok(vesting_state.vested_amount_at_revocation);
+    }
 
-/// Calculates the unlocked token amount using linear vesting formula.
-/// Uses integer arithmetic with floor division to ensure
-/// unlocked_amount never exceeds the true proportional share.
+    let current_time = Clock::get()?.unix_timestamp;
+    Ok(calculate_unlocked(
+        vesting_state.total_amount,
+        vesting_state.start_time,
+        vesting_state.end_time,
+        current_time,
+    ))
+}
+
+/// Calculates the unlocked token amount using a linear vesting formula.
+/// Integer floor division ensures the unlocked amount never exceeds the true
+/// proportional share.
 pub fn calculate_unlocked(
     total_amount: u64,
     start_time: i64,
@@ -180,14 +212,12 @@ pub fn calculate_unlocked(
     if current_time >= end_time {
         return total_amount;
     }
+
     let elapsed = (current_time - start_time) as u128;
     let duration = (end_time - start_time) as u128;
     let total = total_amount as u128;
-    // total * elapsed / duration — u128 prevents overflow for reasonable values
     ((total * elapsed) / duration) as u64
 }
-
-// ── Account contexts ────────────────────────────────────────────────
 
 #[derive(Accounts)]
 #[instruction(params: CreateVestingParams)]
@@ -197,7 +227,7 @@ pub struct CreateVestingSchedule<'info> {
         payer = funder,
         space = VestingState::SIZE,
         seeds = [
-            "vesting".as_ref(),
+            b"vesting",
             funder.key().as_ref(),
             recipient.key().as_ref(),
             &params.nonce.to_le_bytes(),
@@ -209,15 +239,19 @@ pub struct CreateVestingSchedule<'info> {
     #[account(mut)]
     pub funder: Signer<'info>,
 
-    /// CHECK: Recipient address used as PDA seed; validation happens in handler logic.
+    /// CHECK: Recipient is stored as a stream beneficiary and used as a PDA seed.
     pub recipient: UncheckedAccount<'info>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        constraint = funder_token_account.owner == funder.key() @ VestingError::InvalidTokenOwner
+    )]
     pub funder_token_account: Account<'info, TokenAccount>,
 
     #[account(
         mut,
-        constraint = vesting_token_account.owner == vesting_state.key() @ VestingError::InvalidVaultOwner
+        constraint = vesting_token_account.owner == vesting_state.key() @ VestingError::InvalidVaultOwner,
+        constraint = vesting_token_account.mint == funder_token_account.mint @ VestingError::InvalidTokenMint
     )]
     pub vesting_token_account: Account<'info, TokenAccount>,
 
@@ -235,11 +269,10 @@ pub struct UnlockMilestone<'info> {
 }
 
 #[derive(Accounts)]
-pub struct Claim<'info> {
+pub struct Withdraw<'info> {
     #[account(
         mut,
-        has_one = recipient,
-        constraint = !vesting_state.is_revoked @ VestingError::StreamRevoked
+        constraint = vesting_state.recipient == recipient.key() @ VestingError::UnauthorizedClaimant
     )]
     pub vesting_state: Account<'info, VestingState>,
 
@@ -247,33 +280,45 @@ pub struct Claim<'info> {
 
     #[account(
         mut,
-        constraint = recipient_token_account.owner == recipient.key()
+        constraint = recipient_token_account.owner == recipient.key() @ VestingError::InvalidTokenOwner,
+        constraint = recipient_token_account.mint == vesting_token_account.mint @ VestingError::InvalidTokenMint
     )]
     pub recipient_token_account: Account<'info, TokenAccount>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        constraint = vesting_token_account.owner == vesting_state.key() @ VestingError::InvalidVaultOwner
+    )]
     pub vesting_token_account: Account<'info, TokenAccount>,
 
     pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]
-pub struct CancelVesting<'info> {
-    #[account(mut, has_one = authority_revoker)]
+pub struct RevokeVesting<'info> {
+    #[account(
+        mut,
+        has_one = authority_revoker,
+        constraint = treasury_return_address.key() == vesting_state.treasury_return_address @ VestingError::InvalidTreasuryReturnAddress
+    )]
     pub vesting_state: Account<'info, VestingState>,
 
     pub authority_revoker: Signer<'info>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        constraint = treasury_return_address.mint == vesting_token_account.mint @ VestingError::InvalidTokenMint
+    )]
     pub treasury_return_address: Account<'info, TokenAccount>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        constraint = vesting_token_account.owner == vesting_state.key() @ VestingError::InvalidVaultOwner
+    )]
     pub vesting_token_account: Account<'info, TokenAccount>,
 
     pub token_program: Program<'info, Token>,
 }
-
-// ── Parameters ──────────────────────────────────────────────────────
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct CreateVestingParams {
@@ -285,8 +330,6 @@ pub struct CreateVestingParams {
     pub milestone_count: u8,
     pub nonce: u64,
 }
-
-// ── Data types ──────────────────────────────────────────────────────
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq, Debug)]
 pub enum VestingType {
@@ -313,24 +356,68 @@ pub struct VestingState {
     pub milestones_reached: u8,
     pub bump: u8,
     pub nonce: u64,
+    pub vested_amount_at_revocation: u64,
 }
 
 impl VestingState {
-    // 8 (discriminator) + 32*5 (Pubkeys) + 8*2 (u64s) + 1 (VestingType) + 1 (bool)
-    // + 8*3 (i64s) + 1*3 (u8s) + 1 (bump) + 8 (nonce) = 222, rounded to 224
-    pub const SIZE: usize = 224;
+    pub const SIZE: usize = 256;
 }
-
-// ── Error codes ────────────────────────────────────────────────────
 
 #[error_code]
 pub enum VestingError {
+    #[msg("Start time must be before end time")]
     InvalidTimeRange,
+    #[msg("Amount must be greater than zero")]
     InvalidAmount,
+    #[msg("Only linear vesting is supported")]
     UnsupportedVestingType,
+    #[msg("Only the stream recipient can withdraw from this stream")]
     UnauthorizedClaimant,
+    #[msg("No unlocked tokens are available to withdraw")]
     InsufficientUnlockedTokens,
+    #[msg("Vesting stream has already been revoked")]
     StreamRevoked,
+    #[msg("Arithmetic overflow")]
     ArithmeticOverflow,
+    #[msg("Vault token account must be owned by the vesting PDA")]
     InvalidVaultOwner,
+    #[msg("Token account mint does not match the vesting mint")]
+    InvalidTokenMint,
+    #[msg("Token account owner is invalid")]
+    InvalidTokenOwner,
+    #[msg("Treasury return address does not match the stream")]
+    InvalidTreasuryReturnAddress,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unlocked_before_or_at_start_is_zero() {
+        assert_eq!(calculate_unlocked(1_000, 100, 200, 99), 0);
+        assert_eq!(calculate_unlocked(1_000, 100, 200, 100), 0);
+    }
+
+    #[test]
+    fn unlocked_at_25_percent_is_quarter() {
+        assert_eq!(calculate_unlocked(1_000, 100, 200, 125), 250);
+    }
+
+    #[test]
+    fn unlocked_at_50_percent_is_half() {
+        assert_eq!(calculate_unlocked(1_000, 100, 200, 150), 500);
+    }
+
+    #[test]
+    fn unlocked_at_or_after_end_is_total() {
+        assert_eq!(calculate_unlocked(1_000, 100, 200, 200), 1_000);
+        assert_eq!(calculate_unlocked(1_000, 100, 200, 201), 1_000);
+    }
+
+    #[test]
+    fn unlocked_uses_floor_division() {
+        assert_eq!(calculate_unlocked(1_000, 0, 3, 1), 333);
+        assert_eq!(calculate_unlocked(1_000, 0, 3, 2), 666);
+    }
 }
