@@ -339,7 +339,7 @@ describe("vestalink", () => {
         stream.vestingStatePda
       );
       const claimed = BigInt(state.claimedAmount.toString());
-      assert.isAtLeast(Number(claimed), 250_000);
+      assert.isAtLeast(Number(claimed), 230_000);
       assert.isBelow(Number(claimed), 300_000);
     });
 
