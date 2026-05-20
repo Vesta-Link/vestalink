@@ -124,7 +124,7 @@ textarea:focus-visible {
 }
 
 .page-shell {
-  width: min(1180px, calc(100vw - 40px));
+  width: min(1320px, calc(100vw - 40px));
   margin: 0 auto;
   padding: 48px 0 64px;
 }
@@ -138,7 +138,7 @@ textarea:focus-visible {
 
 .two-column {
   display: grid;
-  grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
+  grid-template-columns: minmax(520px, 0.9fr) minmax(420px, 1.1fr);
   gap: 24px;
   align-items: start;
 }
@@ -252,10 +252,15 @@ textarea:focus-visible {
 }
 
 .panel {
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--background);
   padding: 24px;
+}
+
+.form-panel {
+  overflow: hidden;
 }
 
 .proof-panel {
@@ -291,12 +296,13 @@ textarea:focus-visible {
 
 .field,
 .field-grid {
+  min-width: 0;
   display: grid;
   gap: 7px;
 }
 
 .field-grid {
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -307,6 +313,7 @@ label {
 
 input,
 textarea {
+  min-width: 0;
   width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -538,9 +545,12 @@ textarea::placeholder {
     font-size: 48px;
   }
 
-  .field-grid,
+  .field-grid {
+    grid-template-columns: 1fr;
+  }
+
   .metric-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .stream-card-top,
