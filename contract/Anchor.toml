@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-vestalink = "F1vVgK28j53ydLtMJhL6c6Q7CizdEASEivN5bWwyzNtM"
+vestalink = "8q5LLVTGNUS16AV4xj6KPLet1M7y4xpa8XjxV7cHH98r"
 
 [registry]
 url = "https://api.apr.dev"
