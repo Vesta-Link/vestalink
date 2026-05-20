@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_lang::solana_program::clock::Clock;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
-declare_id!("F1vVgK28j53ydLtMJhL6c6Q7CizdEASEivN5bWwyzNtM");
+declare_id!("8q5LLVTGNUS16AV4xj6KPLet1M7y4xpa8XjxV7cHH98r");
 
 #[program]
 pub mod vestalink {
