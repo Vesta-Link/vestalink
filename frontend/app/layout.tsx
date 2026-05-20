@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { ConnectButton, PrivySolanaProvider } from "@/components/privy-provider";
-import { PROGRAM_ID, shorten } from "@/lib/vesting";
 
 import "./globals.css";
 
@@ -26,9 +25,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </nav>
             <div className="header-actions">
               <span className="network-pill">Devnet</span>
-              <span className="program-pill" title={PROGRAM_ID.toBase58()}>
-                {shorten(PROGRAM_ID)}
-              </span>
               <ConnectButton />
             </div>
           </header>

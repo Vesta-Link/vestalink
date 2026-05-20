@@ -108,7 +108,6 @@ textarea:focus-visible {
 }
 
 .network-pill,
-.program-pill,
 .status-pill,
 .token-label {
   min-height: 32px;
@@ -122,10 +121,6 @@ textarea:focus-visible {
   font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
   font-size: 12px;
   white-space: nowrap;
-}
-
-.program-pill {
-  color: var(--foreground);
 }
 
 .page-shell {
@@ -555,8 +550,7 @@ textarea::placeholder {
     flex-direction: column;
   }
 
-  .network-pill,
-  .program-pill {
+  .network-pill {
     display: none;
   }
 }
