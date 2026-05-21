@@ -21,6 +21,14 @@ import {
 } from "@/lib/vesting";
 import { PublicKey } from "@solana/web3.js";
 
+const TEST_TOKEN_PRESETS = [
+  {
+    label: "VESTA test token",
+    mint: "5rZnscYsBtYKbkne8oVforFTD9TuSZXCt3LmzX45cPMh",
+    description: "Devnet dummy SPL token for testing the vesting workflow."
+  }
+];
+
 function defaultDate(minutesFromNow: number) {
   const date = new Date(Date.now() + minutesFromNow * 60 * 1000);
   date.setSeconds(0, 0);
@@ -51,6 +59,7 @@ function AdminPageInner() {
   const { wallet, publicKey } = useActiveSolanaWallet();
   const { signAndSendTransaction } = useSignAndSendTransaction();
   const [mint, setMint] = useState("");
+  const [selectedPreset, setSelectedPreset] = useState("");
   const [rows, setRows] = useState("");
   const [start, setStart] = useState(defaultDate(5));
   const [end, setEnd] = useState(defaultDate(60 * 24 * 30));
@@ -132,6 +141,13 @@ function AdminPageInner() {
     }
   }
 
+  function selectPreset(value: string) {
+    setSelectedPreset(value);
+    if (value) {
+      setMint(value);
+    }
+  }
+
   return (
     <main className="page-shell two-column">
       <section className="panel form-panel">
@@ -143,6 +159,27 @@ function AdminPageInner() {
         </p>
 
         <form className="stack" onSubmit={onSubmit} aria-busy={isSubmitting}>
+          <div className="field">
+            <label htmlFor="token-preset">Token preset</label>
+            <select
+              id="token-preset"
+              value={selectedPreset}
+              onChange={(event) => selectPreset(event.target.value)}
+            >
+              <option value="">Custom SPL token</option>
+              {TEST_TOKEN_PRESETS.map((preset) => (
+                <option key={preset.mint} value={preset.mint}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+            {selectedPreset && (
+              <p className="hint">
+                {TEST_TOKEN_PRESETS.find((preset) => preset.mint === selectedPreset)?.description}
+              </p>
+            )}
+          </div>
+
           <div className="field">
             <label htmlFor="mint">Token mint</label>
             <input
