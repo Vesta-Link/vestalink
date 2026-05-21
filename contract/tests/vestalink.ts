@@ -22,6 +22,7 @@ describe("vestalink", () => {
 
   let mint: anchor.web3.PublicKey;
   let otherMint: anchor.web3.PublicKey;
+  let faucetMint: anchor.web3.PublicKey;
   let funderTokenAccount: anchor.web3.PublicKey;
   let recipient: anchor.web3.Keypair;
 
@@ -45,6 +46,13 @@ describe("vestalink", () => {
         streamRecipient.toBuffer(),
         nonce.toArrayLike(Buffer, "le", 8),
       ],
+      program.programId
+    );
+  }
+
+  function deriveFaucetPda() {
+    return anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("vesta_faucet")],
       program.programId
     );
   }
@@ -204,6 +212,14 @@ describe("vestalink", () => {
       provider.connection,
       wallet.payer,
       wallet.payer.publicKey,
+      null,
+      6
+    );
+    const [faucetAuthority] = deriveFaucetPda();
+    faucetMint = await createMint(
+      provider.connection,
+      wallet.payer,
+      faucetAuthority,
       null,
       6
     );
@@ -622,6 +638,43 @@ describe("vestalink", () => {
             .rpc(),
         "InvalidTreasuryReturnAddress"
       );
+    });
+  });
+
+  describe("request_vesta", () => {
+    it("mints test VESTA from the faucet PDA authority", async () => {
+      const requesterTokenAccount = getAssociatedTokenAddressSync(
+        faucetMint,
+        wallet.payer.publicKey
+      );
+      const [faucetAuthority] = deriveFaucetPda();
+
+      await program.methods
+        .requestVesta()
+        .accountsPartial({
+          requester: wallet.payer.publicKey,
+          vestaMint: faucetMint,
+          requesterTokenAccount,
+          faucetAuthority,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .preInstructions([
+          createAssociatedTokenAccountIdempotentInstruction(
+            wallet.payer.publicKey,
+            requesterTokenAccount,
+            wallet.payer.publicKey,
+            faucetMint,
+            TOKEN_PROGRAM_ID,
+            ASSOCIATED_TOKEN_PROGRAM_ID
+          ),
+        ])
+        .rpc();
+
+      const account = await getAccount(
+        provider.connection,
+        requesterTokenAccount
+      );
+      assert.equal(account.amount.toString(), "10000000000");
     });
   });
 

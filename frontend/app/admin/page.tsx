@@ -1,6 +1,6 @@
 "use client";
 
-import { RefreshCw, Send } from "lucide-react";
+import { Coins, RefreshCw, Send } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import bs58 from "bs58";
 
@@ -12,11 +12,13 @@ import {
 } from "@/components/privy-provider";
 import {
   buildCreateStreamTransaction,
+  buildRequestVestaTransaction,
   fetchStreams,
   parseCsvRows,
   prepareUnsignedTransaction,
   getConnection,
   serializeTransactionError,
+  VESTA_FAUCET_AMOUNT,
   type StreamView
 } from "@/lib/vesting";
 import { PublicKey } from "@solana/web3.js";
@@ -24,7 +26,7 @@ import { PublicKey } from "@solana/web3.js";
 const TEST_TOKEN_PRESETS = [
   {
     label: "VESTA test token",
-    mint: "5rZnscYsBtYKbkne8oVforFTD9TuSZXCt3LmzX45cPMh",
+    mint: "4zFYPYxDAio8BDPqfpAWhEMzpyPANxJABmbWPmBq6LKx",
     description: "Devnet dummy SPL token for testing the vesting workflow."
   }
 ];
@@ -66,6 +68,7 @@ function AdminPageInner() {
   const [streams, setStreams] = useState<StreamView[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRequestingVesta, setIsRequestingVesta] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -148,6 +151,51 @@ function AdminPageInner() {
     }
   }
 
+  async function requestVesta() {
+    setError("");
+    setSuccess("");
+
+    if (!wallet || !publicKey) {
+      setError("Connect an admin wallet first.");
+      return;
+    }
+
+    try {
+      setIsRequestingVesta(true);
+      const transaction = await buildRequestVestaTransaction({
+        connection,
+        wallet: { publicKey },
+        mint: new PublicKey(TEST_TOKEN_PRESETS[0].mint)
+      });
+      const prepared = await prepareUnsignedTransaction({
+        connection,
+        transaction,
+        feePayer: publicKey
+      });
+      const result = await signAndSendTransaction({
+        transaction: prepared.bytes,
+        wallet,
+        chain: "solana:devnet"
+      });
+      const signature = bs58.encode(result.signature);
+      await connection.confirmTransaction(
+        {
+          signature,
+          blockhash: prepared.blockhash,
+          lastValidBlockHeight: prepared.lastValidBlockHeight
+        },
+        "confirmed"
+      );
+      setSelectedPreset(TEST_TOKEN_PRESETS[0].mint);
+      setMint(TEST_TOKEN_PRESETS[0].mint);
+      setSuccess(`Minted ${VESTA_FAUCET_AMOUNT} VESTA to your wallet.`);
+    } catch (err) {
+      setError(serializeTransactionError(err));
+    } finally {
+      setIsRequestingVesta(false);
+    }
+  }
+
   return (
     <main className="page-shell two-column">
       <section className="panel form-panel">
@@ -179,6 +227,24 @@ function AdminPageInner() {
               </p>
             )}
           </div>
+
+          {selectedPreset === TEST_TOKEN_PRESETS[0].mint && (
+            <div className="faucet-card">
+              <div>
+                <strong>Need test tokens?</strong>
+                <p className="hint">Mint {VESTA_FAUCET_AMOUNT} VESTA to your connected wallet.</p>
+              </div>
+              <button
+                className="button secondary compact"
+                type="button"
+                onClick={requestVesta}
+                disabled={isRequestingVesta}
+              >
+                <Coins size={15} aria-hidden="true" />
+                {isRequestingVesta ? "Requesting..." : "Request VESTA"}
+              </button>
+            </div>
+          )}
 
           <div className="field">
             <label htmlFor="mint">Token mint</label>

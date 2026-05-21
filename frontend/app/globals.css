@@ -309,6 +309,23 @@ textarea:focus-visible {
   gap: 12px;
 }
 
+.faucet-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: var(--surface);
+}
+
+.faucet-card strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
 label {
   font-size: 13px;
   font-weight: 560;

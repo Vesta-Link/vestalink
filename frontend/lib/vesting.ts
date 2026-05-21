@@ -21,6 +21,7 @@ export const PROGRAM_ID = new PublicKey(
   process.env.NEXT_PUBLIC_VESTALINK_PROGRAM_ID ?? VESTALINK_IDL.address
 );
 export const EXPLORER_CLUSTER = "devnet";
+export const VESTA_FAUCET_AMOUNT = "10000";
 
 export type AppWallet = {
   publicKey: PublicKey;
@@ -162,6 +163,10 @@ export function deriveVestingPda(funder: PublicKey, recipient: PublicKey, nonce:
   )[0];
 }
 
+export function deriveVestaFaucetPda() {
+  return PublicKey.findProgramAddressSync([Buffer.from("vesta_faucet")], PROGRAM_ID)[0];
+}
+
 export function randomNonce() {
   const bytes = new Uint8Array(8);
   crypto.getRandomValues(bytes);
@@ -278,6 +283,39 @@ export async function buildWithdrawTransaction(params: {
     .instruction();
 
   return new Transaction().add(createRecipientAta, withdraw);
+}
+
+export async function buildRequestVestaTransaction(params: {
+  connection: Connection;
+  wallet: AppWallet;
+  mint: PublicKey;
+}) {
+  const provider = getProvider(params.connection, params.wallet);
+  const program = getProgram(provider);
+  const requesterTokenAccount = getAssociatedTokenAddressSync(params.mint, params.wallet.publicKey);
+  const faucetAuthority = deriveVestaFaucetPda();
+
+  const createRequesterAta = createAssociatedTokenAccountIdempotentInstruction(
+    params.wallet.publicKey,
+    requesterTokenAccount,
+    params.wallet.publicKey,
+    params.mint,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID
+  );
+
+  const requestVesta = await program.methods
+    .requestVesta()
+    .accountsPartial({
+      requester: params.wallet.publicKey,
+      vestaMint: params.mint,
+      requesterTokenAccount,
+      faucetAuthority,
+      tokenProgram: TOKEN_PROGRAM_ID
+    })
+    .instruction();
+
+  return new Transaction().add(createRequesterAta, requestVesta);
 }
 
 export async function prepareUnsignedTransaction(params: {
