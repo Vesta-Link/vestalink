@@ -42,7 +42,16 @@ type FaucetToast = {
 function defaultDate(minutesFromNow: number) {
   const date = new Date(Date.now() + minutesFromNow * 60 * 1000);
   date.setSeconds(0, 0);
-  return date.toISOString().slice(0, 16);
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000);
+  return offsetDate.toISOString().slice(0, 16);
+}
+
+function parseLocalDateTime(value: string, label: string) {
+  const time = new Date(value).getTime();
+  if (Number.isNaN(time)) {
+    throw new Error(`${label} date is invalid.`);
+  }
+  return Math.floor(time / 1000);
 }
 
 export default function AdminPage() {
@@ -120,8 +129,8 @@ function AdminPageInner() {
         wallet: { publicKey },
         mint: new PublicKey(mint.trim()),
         rows: parsedRows,
-        startTime: Math.floor(new Date(start).getTime() / 1000),
-        endTime: Math.floor(new Date(end).getTime() / 1000)
+        startTime: parseLocalDateTime(start, "Start"),
+        endTime: parseLocalDateTime(end, "End")
       });
 
       const prepared = await prepareUnsignedTransaction({
