@@ -44,11 +44,6 @@ export function PrivySolanaProvider({ children }: { children: ReactNode }) {
           solana: {
             connectors: toSolanaWalletConnectors()
           }
-        },
-        embeddedWallets: {
-          solana: {
-            createOnLogin: "all-users"
-          }
         }
       }}
     >
@@ -101,8 +96,8 @@ function PrivyConnectButton() {
 export function useActiveSolanaWallet() {
   const { wallets, ready } = useWallets();
   const wallet = useMemo(() => {
-    const embedded = wallets.find((item) => item.standardWallet.name === "Privy");
-    return embedded ?? wallets[0];
+    const external = wallets.find((item) => item.standardWallet.name !== "Privy");
+    return external ?? wallets[0];
   }, [wallets]);
 
   return {
