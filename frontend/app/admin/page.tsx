@@ -13,6 +13,7 @@ import {
 import {
   buildCreateStreamTransaction,
   buildRequestVestaTransaction,
+  explorerUrl,
   fetchStreams,
   parseCsvRows,
   prepareUnsignedTransaction,
@@ -30,6 +31,13 @@ const TEST_TOKEN_PRESETS = [
     description: "Devnet dummy SPL token for testing the vesting workflow."
   }
 ];
+
+type FaucetToast = {
+  type: "success" | "error";
+  title: string;
+  message: string;
+  signature?: string;
+};
 
 function defaultDate(minutesFromNow: number) {
   const date = new Date(Date.now() + minutesFromNow * 60 * 1000);
@@ -71,6 +79,7 @@ function AdminPageInner() {
   const [isRequestingVesta, setIsRequestingVesta] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [faucetToast, setFaucetToast] = useState<FaucetToast | null>(null);
 
   const adminStreams = useMemo(() => {
     if (!publicKey) return [];
@@ -154,12 +163,18 @@ function AdminPageInner() {
   async function requestVesta() {
     setError("");
     setSuccess("");
+    setFaucetToast(null);
 
     if (!wallet || !publicKey) {
-      setError("Connect an admin wallet first.");
+      setFaucetToast({
+        type: "error",
+        title: "Request failed",
+        message: "Connect an admin wallet first."
+      });
       return;
     }
 
+    let signature = "";
     try {
       setIsRequestingVesta(true);
       const transaction = await buildRequestVestaTransaction({
@@ -177,7 +192,7 @@ function AdminPageInner() {
         wallet,
         chain: "solana:devnet"
       });
-      const signature = bs58.encode(result.signature);
+      signature = bs58.encode(result.signature);
       await connection.confirmTransaction(
         {
           signature,
@@ -189,16 +204,47 @@ function AdminPageInner() {
       setSelectedPreset(TEST_TOKEN_PRESETS[0].mint);
       setMint(TEST_TOKEN_PRESETS[0].mint);
       setSuccess(`Minted ${VESTA_FAUCET_AMOUNT} VESTA to your wallet.`);
+      setFaucetToast({
+        type: "success",
+        title: "VESTA requested",
+        message: `Minted ${VESTA_FAUCET_AMOUNT} VESTA to your wallet.`,
+        signature
+      });
     } catch (err) {
-      setError(serializeTransactionError(err));
+      const message = serializeTransactionError(err);
+      setError(message);
+      setFaucetToast({
+        type: "error",
+        title: "Request failed",
+        message,
+        signature: signature || undefined
+      });
     } finally {
       setIsRequestingVesta(false);
     }
   }
 
   return (
-    <main className="page-shell two-column">
-      <section className="panel form-panel">
+    <>
+      {faucetToast && (
+        <div className={`toast ${faucetToast.type}`} role="status" aria-live="polite">
+          <div>
+            <strong>{faucetToast.title}</strong>
+            <p>{faucetToast.message}</p>
+            {faucetToast.signature && (
+              <a href={explorerUrl(faucetToast.signature, "tx")} target="_blank" rel="noreferrer">
+                Tx {faucetToast.signature.slice(0, 8)}...{faucetToast.signature.slice(-8)}
+              </a>
+            )}
+          </div>
+          <button type="button" onClick={() => setFaucetToast(null)} aria-label="Dismiss">
+            Close
+          </button>
+        </div>
+      )}
+
+      <main className="page-shell two-column">
+        <section className="panel form-panel">
         <p className="eyebrow">Admin</p>
         <h1>Create vesting streams</h1>
         <p className="muted">
@@ -335,6 +381,7 @@ function AdminPageInner() {
           </div>
         )}
       </section>
-    </main>
+      </main>
+    </>
   );
 }

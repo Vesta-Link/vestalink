@@ -384,6 +384,63 @@ textarea::placeholder {
   color: var(--inverse);
 }
 
+.toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 30;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  width: min(420px, calc(100vw - 40px));
+  border: 1px solid var(--foreground);
+  border-radius: var(--radius);
+  padding: 14px;
+  background: var(--background);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
+}
+
+.toast.success {
+  background: var(--foreground);
+  color: var(--inverse);
+}
+
+.toast.error {
+  border-style: dashed;
+}
+
+.toast strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.toast p {
+  margin: 0;
+  color: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.toast a {
+  display: inline-flex;
+  margin-top: 8px;
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.toast button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 560;
+}
+
 .section-heading {
   display: flex;
   align-items: flex-start;
