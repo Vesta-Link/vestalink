@@ -39,6 +39,15 @@ type FaucetToast = {
   signature?: string;
 };
 
+type VestingEstimate = {
+  total: string;
+  duration: string;
+  perDay: string;
+  perHour: string;
+  perSecond: string;
+  symbol: string;
+};
+
 function defaultDate(minutesFromNow: number) {
   const date = new Date(Date.now() + minutesFromNow * 60 * 1000);
   date.setSeconds(0, 0);
@@ -52,6 +61,53 @@ function parseLocalDateTime(value: string, label: string) {
     throw new Error(`${label} date is invalid.`);
   }
   return Math.floor(time / 1000);
+}
+
+function formatNumber(value: number, maximumFractionDigits = 6) {
+  return new Intl.NumberFormat(undefined, {
+    maximumFractionDigits,
+    minimumFractionDigits: 0
+  }).format(value);
+}
+
+function formatDuration(seconds: number) {
+  const days = seconds / 86_400;
+  if (days >= 1) return `${formatNumber(days, 2)} day${days === 1 ? "" : "s"}`;
+
+  const hours = seconds / 3_600;
+  if (hours >= 1) return `${formatNumber(hours, 2)} hour${hours === 1 ? "" : "s"}`;
+
+  const minutes = seconds / 60;
+  if (minutes >= 1) return `${formatNumber(minutes, 2)} minute${minutes === 1 ? "" : "s"}`;
+
+  return `${formatNumber(seconds, 2)} second${seconds === 1 ? "" : "s"}`;
+}
+
+function getVestingEstimate(rows: string, start: string, end: string, symbol: string) {
+  try {
+    const parsedRows = parseCsvRows(rows);
+    const total = parsedRows.reduce((sum, row) => {
+      const amount = Number(row.amount.replace(/,/g, ""));
+      if (!Number.isFinite(amount)) throw new Error("Invalid amount.");
+      return sum + amount;
+    }, 0);
+    const startTime = parseLocalDateTime(start, "Start");
+    const endTime = parseLocalDateTime(end, "End");
+    const durationSeconds = endTime - startTime;
+
+    if (total <= 0 || durationSeconds <= 0) return null;
+
+    return {
+      total: formatNumber(total, 6),
+      duration: formatDuration(durationSeconds),
+      perDay: formatNumber(total / (durationSeconds / 86_400), 6),
+      perHour: formatNumber(total / (durationSeconds / 3_600), 6),
+      perSecond: formatNumber(total / durationSeconds, 8),
+      symbol
+    } satisfies VestingEstimate;
+  } catch {
+    return null;
+  }
 }
 
 export default function AdminPage() {
@@ -94,6 +150,11 @@ function AdminPageInner() {
     if (!publicKey) return [];
     return streams.filter((stream) => stream.account.funder.equals(publicKey));
   }, [streams, publicKey]);
+
+  const estimate = useMemo(() => {
+    const symbol = selectedPreset === TEST_TOKEN_PRESETS[0].mint ? "VESTA" : "tokens";
+    return getVestingEstimate(rows, start, end, symbol);
+  }, [rows, start, end, selectedPreset]);
 
   const loadStreams = useCallback(async () => {
     setIsLoading(true);
@@ -360,6 +421,8 @@ function AdminPageInner() {
         </form>
       </section>
 
+      <EstimateCard estimate={estimate} />
+
       <section className="panel dashboard-panel">
         <div className="section-heading">
           <div>
@@ -392,5 +455,51 @@ function AdminPageInner() {
       </section>
       </main>
     </>
+  );
+}
+
+function EstimateCard({ estimate }: { estimate: VestingEstimate | null }) {
+  return (
+    <section className="panel estimate-panel">
+      <p className="eyebrow">Live estimation</p>
+      <h2>Unlock rate</h2>
+      {estimate ? (
+        <div className="estimate-list">
+          <div>
+            <span>Total</span>
+            <strong>
+              {estimate.total} {estimate.symbol}
+            </strong>
+          </div>
+          <div>
+            <span>Duration</span>
+            <strong>{estimate.duration}</strong>
+          </div>
+          <div>
+            <span>Per day</span>
+            <strong>
+              {estimate.perDay} {estimate.symbol}
+            </strong>
+          </div>
+          <div>
+            <span>Per hour</span>
+            <strong>
+              {estimate.perHour} {estimate.symbol}
+            </strong>
+          </div>
+          <div>
+            <span>Per second</span>
+            <strong>
+              {estimate.perSecond} {estimate.symbol}
+            </strong>
+          </div>
+        </div>
+      ) : (
+        <div className="empty-state compact-empty">
+          <strong>No estimate yet</strong>
+          <p>Add valid recipients, amounts, start time, and end time.</p>
+        </div>
+      )}
+    </section>
   );
 }

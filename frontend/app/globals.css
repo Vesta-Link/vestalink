@@ -263,7 +263,19 @@ textarea:focus-visible {
 }
 
 .form-panel {
+  grid-column: 1;
+  grid-row: 1 / span 2;
   overflow: hidden;
+}
+
+.dashboard-panel {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.estimate-panel {
+  grid-column: 2;
+  grid-row: 2;
 }
 
 .proof-panel {
@@ -450,10 +462,51 @@ textarea::placeholder {
 }
 
 .section-heading h1,
-.section-heading h2 {
+.section-heading h2,
+.estimate-panel h2 {
   margin: 0;
   font-size: 30px;
   line-height: 1.05;
+}
+
+.estimate-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.estimate-list div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+
+.estimate-list div:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.estimate-list span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.estimate-list strong {
+  overflow: hidden;
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-empty {
+  min-height: 160px;
+  margin-top: 22px;
 }
 
 .stream-list {
@@ -602,6 +655,25 @@ textarea::placeholder {
   .home-grid,
   .two-column {
     grid-template-columns: 1fr;
+  }
+
+  .form-panel,
+  .dashboard-panel,
+  .estimate-panel {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .form-panel {
+    order: 1;
+  }
+
+  .estimate-panel {
+    order: 2;
+  }
+
+  .dashboard-panel {
+    order: 3;
   }
 
   .site-header {
