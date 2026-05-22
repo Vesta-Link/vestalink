@@ -2,7 +2,7 @@
 
 Token distribution protocol on Solana that automates vesting, streaming, and scheduled token distribution.
 
-> **Scaffold phase** — This project contains the Anchor program structure, account definitions, and empty instruction handlers. No business logic is implemented yet.
+> **Beta phase** — This project contains a fully implemented Anchor program supporting Linear, Cliff, and Milestone-based vesting schedules.
 
 ## Monorepo Structure
 
@@ -147,14 +147,14 @@ anchor test --skip-local-validator
 
 ## Program Overview
 
-VestaLink defines four instruction handlers (currently scaffold placeholders):
+VestaLink defines the following core instructions (with aliases for convenience):
 
-| Instruction               | Description                                              |
-| ------------------------- | -------------------------------------------------------- |
-| `create_vesting_schedule` | Create a new vesting schedule for a recipient            |
-| `unlock_milestone`        | Unlock a milestone in a milestone-based vesting schedule |
-| `claim`                   | Claim vested tokens                                      |
-| `cancel_vesting`          | Revoke a vesting schedule and return unvested tokens     |
+| Instruction               | Aliases                                  | Description                                              |
+| ------------------------- | ---------------------------------------- | -------------------------------------------------------- |
+| `create_vesting_schedule` | `create_stream`                          | Create a new vesting schedule for a recipient            |
+| `unlock_milestone`        |                                          | Unlock a milestone in a milestone-based vesting schedule |
+| `claim`                   | `withdraw`, `claim_tokens`               | Claim vested tokens                                      |
+| `cancel_vesting`          | `revoke_vesting`, `cancel_stream`        | Revoke a vesting schedule and return unvested tokens     |
 
 ### VestingState Account
 
@@ -176,6 +176,9 @@ Each vesting schedule is stored in a PDA account seeded by `["vesting", funder, 
 | `cliff_time`              | i64         | Unix timestamp for cliff unlock                          |
 | `milestone_count`         | u8          | Total number of milestones                               |
 | `milestones_reached`      | u8          | Number of milestones unlocked so far                     |
+| `bump`                    | u8          | PDA bump seed                                            |
+| `nonce`                   | u64         | Unique identifier to allow multiple schedules per pair   |
+| `vested_amount_at_revocation` | u64     | Amount vested at the time of revocation                  |
 
 ## License
 

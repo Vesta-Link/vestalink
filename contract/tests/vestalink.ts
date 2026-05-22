@@ -74,6 +74,8 @@ describe("vestalink", () => {
       nonce?: anchor.BN;
       streamRecipient?: anchor.web3.Keypair;
       vestingType?: any;
+      cliffTime?: anchor.BN;
+      milestoneCount?: number;
       method?: "createStream" | "createVestingSchedule";
       funderTokenAcct?: anchor.web3.PublicKey;
       vaultTokenAccount?: anchor.web3.PublicKey;
@@ -86,6 +88,8 @@ describe("vestalink", () => {
     const endTime =
       params.endTime ?? new anchor.BN(nowSeconds() + 365 * 24 * 60 * 60);
     const vestingType = params.vestingType ?? { linear: {} };
+    const cliffTime = params.cliffTime ?? startTime;
+    const milestoneCount = params.milestoneCount ?? 0;
     const [vestingStatePda, vestingStateBump] = derivePda(
       wallet.payer.publicKey,
       streamRecipient.publicKey,
@@ -128,8 +132,8 @@ describe("vestalink", () => {
       vestingType,
       startTime,
       endTime,
-      cliffTime: startTime,
-      milestoneCount: 0,
+      cliffTime,
+      milestoneCount,
       nonce,
     };
     const builder =
@@ -295,9 +299,10 @@ describe("vestalink", () => {
         () =>
           createStream({
             vestingType: { milestone: {} },
+            milestoneCount: 0,
             nonce: new anchor.BN(5),
           }),
-        "UnsupportedVestingType"
+        "MilestoneCountZero"
       );
     });
 
@@ -626,7 +631,7 @@ describe("vestalink", () => {
   });
 
   describe("unlock_milestone", () => {
-    it("remains explicitly unsupported for this trial", async () => {
+    it("rejects unlock_milestone on a non-milestone stream with UnsupportedVestingType", async () => {
       const stream = await createStream({ nonce: new anchor.BN(30) });
 
       await expectError(
@@ -640,6 +645,833 @@ describe("vestalink", () => {
             .rpc(),
         "UnsupportedVestingType"
       );
+    });
+  });
+
+  describe("milestone vesting", () => {
+    it("creates a milestone stream and stores milestone_count", async () => {
+      const totalAmount = new anchor.BN(1_000_000);
+      const now = nowSeconds();
+      const stream = await createStream({
+        totalAmount,
+        startTime: new anchor.BN(now),
+        endTime: new anchor.BN(now + 365 * 24 * 60 * 60),
+        vestingType: { milestone: {} },
+        milestoneCount: 4,
+        nonce: new anchor.BN(50),
+      });
+
+      const state = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+
+      assert.isTrue("milestone" in state.vestingType);
+      assert.equal(state.milestoneCount, 4);
+      assert.equal(state.milestonesReached, 0);
+      assert.equal(state.totalAmount.toString(), totalAmount.toString());
+    });
+
+    it("rejects milestone stream with milestone_count == 0", async () => {
+      await expectError(
+        () =>
+          createStream({
+            vestingType: { milestone: {} },
+            milestoneCount: 0,
+            nonce: new anchor.BN(51),
+          }),
+        "MilestoneCountZero"
+      );
+    });
+
+    it("increments milestones_reached on unlock_milestone", async () => {
+      const stream = await createStream({
+        totalAmount: new anchor.BN(1_000_000),
+        vestingType: { milestone: {} },
+        milestoneCount: 4,
+        nonce: new anchor.BN(52),
+      });
+
+      let state = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+      assert.equal(state.milestonesReached, 0);
+
+      await program.methods
+        .unlockMilestone()
+        .accountsPartial({
+          vestingState: stream.vestingStatePda,
+          authorityMilestone: wallet.payer.publicKey,
+        })
+        .rpc();
+
+      state = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+      assert.equal(state.milestonesReached, 1);
+
+      await program.methods
+        .unlockMilestone()
+        .accountsPartial({
+          vestingState: stream.vestingStatePda,
+          authorityMilestone: wallet.payer.publicKey,
+        })
+        .rpc();
+
+      state = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+      assert.equal(state.milestonesReached, 2);
+    });
+
+    it("withdraws correct proportional amount after milestone unlock", async () => {
+      // 4 milestones, total 1_000_000 tokens
+      // After 1 milestone: 1/4 = 250_000 unlocked
+      const totalAmount = new anchor.BN(1_000_000);
+      const stream = await createStream({
+        totalAmount,
+        vestingType: { milestone: {} },
+        milestoneCount: 4,
+        nonce: new anchor.BN(53),
+      });
+
+      // Unlock 1 milestone
+      await program.methods
+        .unlockMilestone()
+        .accountsPartial({
+          vestingState: stream.vestingStatePda,
+          authorityMilestone: wallet.payer.publicKey,
+        })
+        .rpc();
+
+      // Withdraw
+      await withdraw(stream);
+
+      const state = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+      const claimed = Number(state.claimedAmount.toString());
+      // 1/4 of 1_000_000 = 250_000
+      assert.equal(claimed, 250_000);
+    });
+
+    it("withdraws full amount after all milestones reached", async () => {
+      // 3 milestones, total 900_000 tokens
+      const totalAmount = new anchor.BN(900_000);
+      const stream = await createStream({
+        totalAmount,
+        vestingType: { milestone: {} },
+        milestoneCount: 3,
+        nonce: new anchor.BN(54),
+      });
+
+      // Unlock all 3 milestones
+      for (let i = 0; i < 3; i++) {
+        await program.methods
+          .unlockMilestone()
+          .accountsPartial({
+            vestingState: stream.vestingStatePda,
+            authorityMilestone: wallet.payer.publicKey,
+          })
+          .rpc();
+      }
+
+      // Withdraw
+      await withdraw(stream);
+
+      const state = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+      assert.equal(state.claimedAmount.toString(), totalAmount.toString());
+    });
+
+    it("rejects extra unlock_milestone after all milestones reached", async () => {
+      const stream = await createStream({
+        vestingType: { milestone: {} },
+        milestoneCount: 2,
+        nonce: new anchor.BN(55),
+      });
+
+      // Unlock both milestones
+      await program.methods
+        .unlockMilestone()
+        .accountsPartial({
+          vestingState: stream.vestingStatePda,
+          authorityMilestone: wallet.payer.publicKey,
+        })
+        .rpc();
+
+      await program.methods
+        .unlockMilestone()
+        .accountsPartial({
+          vestingState: stream.vestingStatePda,
+          authorityMilestone: wallet.payer.publicKey,
+        })
+        .rpc();
+
+      // 3rd unlock should fail
+      await expectError(
+        () =>
+          program.methods
+            .unlockMilestone()
+            .accountsPartial({
+              vestingState: stream.vestingStatePda,
+              authorityMilestone: wallet.payer.publicKey,
+            })
+            .rpc(),
+        "AllMilestonesReached"
+      );
+    });
+
+    it("rejects unlock_milestone on a non-milestone stream with UnsupportedVestingType", async () => {
+      // Create a cliff stream (not milestone)
+      const now = nowSeconds();
+      const stream = await createStream({
+        vestingType: { cliff: {} },
+        cliffTime: new anchor.BN(now + 60),
+        nonce: new anchor.BN(56),
+      });
+
+      await expectError(
+        () =>
+          program.methods
+            .unlockMilestone()
+            .accountsPartial({
+              vestingState: stream.vestingStatePda,
+              authorityMilestone: wallet.payer.publicKey,
+            })
+            .rpc(),
+        "UnsupportedVestingType"
+      );
+    });
+  });
+
+  describe("cliff vesting", () => {
+    it("creates a cliff stream and stores cliff_time", async () => {
+      const totalAmount = new anchor.BN(1_000_000);
+      const now = nowSeconds();
+      const startTime = new anchor.BN(now);
+      const endTime = new anchor.BN(now + 200);
+      const cliffTime = new anchor.BN(now + 100);
+
+      const stream = await createStream({
+        totalAmount,
+        startTime,
+        endTime,
+        cliffTime,
+        vestingType: { cliff: {} },
+        nonce: new anchor.BN(40),
+      });
+
+      const state = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+
+      // Verify vestingType is cliff
+      assert.isTrue("cliff" in state.vestingType);
+      // Verify cliff_time is stored as provided (not overwritten to start_time)
+      assert.equal(state.cliffTime.toString(), cliffTime.toString());
+      assert.equal(state.totalAmount.toString(), totalAmount.toString());
+      assert.equal(state.startTime.toString(), startTime.toString());
+      assert.equal(state.endTime.toString(), endTime.toString());
+    });
+
+    it("rejects withdrawal before cliff_time with InsufficientUnlockedTokens", async () => {
+      const now = nowSeconds();
+      // Stream starts now, cliff is 60s from now, ends 120s from now
+      const stream = await createStream({
+        startTime: new anchor.BN(now),
+        endTime: new anchor.BN(now + 120),
+        cliffTime: new anchor.BN(now + 60),
+        vestingType: { cliff: {} },
+        nonce: new anchor.BN(41),
+      });
+
+      // Before cliff: no tokens unlocked
+      await expectError(
+        () => withdraw(stream),
+        "InsufficientUnlockedTokens"
+      );
+    });
+
+    it("withdraws correct linear amount after cliff_time", async () => {
+      const totalAmount = new anchor.BN(1_000_000);
+      const now = nowSeconds();
+      // Stream started 50s ago, cliff was 25s ago, ends 50s from now
+      // Duration = 100s, elapsed = 50s => 50% vested = 500_000
+      const stream = await createStream({
+        totalAmount,
+        startTime: new anchor.BN(now - 50),
+        endTime: new anchor.BN(now + 50),
+        cliffTime: new anchor.BN(now - 25),
+        vestingType: { cliff: {} },
+        nonce: new anchor.BN(42),
+      });
+
+      await withdraw(stream);
+
+      const state = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+      const claimed = Number(state.claimedAmount.toString());
+      // Should be roughly 50% (allow some timing variance)
+      assert.isAtLeast(claimed, 400_000);
+      assert.isBelow(claimed, 600_000);
+    });
+
+    it("cliff_time == start_time behaves like linear vesting", async () => {
+      const totalAmount = new anchor.BN(1_000_000);
+      const now = nowSeconds();
+      // cliff_time == start_time means no cliff delay
+      const startTime = new anchor.BN(now - 25);
+      const endTime = new anchor.BN(now + 75);
+      const cliffTime = startTime; // cliff == start
+
+      const stream = await createStream({
+        totalAmount,
+        startTime,
+        endTime,
+        cliffTime,
+        vestingType: { cliff: {} },
+        nonce: new anchor.BN(43),
+      });
+
+      const state = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+      assert.equal(state.cliffTime.toString(), startTime.toString());
+
+      // Should be able to withdraw immediately (like linear)
+      await withdraw(stream);
+
+      const stateAfter = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+      const claimed = Number(stateAfter.claimedAmount.toString());
+      assert.isAbove(claimed, 0);
+    });
+
+    it("rejects cliff_time > end_time with CliffTimeExceedsEndTime", async () => {
+      const now = nowSeconds();
+      const startTime = new anchor.BN(now);
+      const endTime = new anchor.BN(now + 100);
+      const cliffTime = new anchor.BN(now + 200); // cliff > end
+
+      await expectError(
+        () =>
+          createStream({
+            startTime,
+            endTime,
+            cliffTime,
+            vestingType: { cliff: {} },
+            nonce: new anchor.BN(44),
+          }),
+        "CliffTimeExceedsEndTime"
+      );
+    });
+  });
+
+  describe("cancel_stream", () => {
+    it("cancels mid-stream: recipient keeps vested, funder gets unvested", async () => {
+      const totalAmount = new anchor.BN(1_000_000);
+      const now = nowSeconds();
+      // Stream started 25s ago, ends 75s from now => ~25% vested
+      const stream = await createStream({
+        totalAmount,
+        startTime: new anchor.BN(now - 25),
+        endTime: new anchor.BN(now + 75),
+        nonce: new anchor.BN(60),
+      });
+
+      const funderBefore = BigInt(
+        (await provider.connection.getTokenAccountBalance(funderTokenAccount))
+          .value.amount
+      );
+
+      await program.methods
+        .cancelStream()
+        .accountsPartial({
+          vestingState: stream.vestingStatePda,
+          authorityRevoker: wallet.payer.publicKey,
+          treasuryReturnAddress: funderTokenAccount,
+          vestingTokenAccount: stream.vestingTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+
+      const cancelledState = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+      const vested = BigInt(cancelledState.vestedAmountAtRevocation.toString());
+      const expectedReturn = BigInt(totalAmount.toString()) - vested;
+      const funderAfter = BigInt(
+        (await provider.connection.getTokenAccountBalance(funderTokenAccount))
+          .value.amount
+      );
+
+      assert.isTrue(cancelledState.isRevoked);
+      assert.isAbove(Number(vested), 0);
+      assert.isBelow(Number(vested), totalAmount.toNumber());
+      assert.equal(
+        (funderAfter - funderBefore).toString(),
+        expectedReturn.toString()
+      );
+
+      // Recipient can still withdraw the vested amount
+      await withdraw(stream);
+      const finalState = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+      assert.equal(finalState.claimedAmount.toString(), vested.toString());
+    });
+
+    it("cancels before cliff: funder gets nearly all tokens back", async () => {
+      const totalAmount = new anchor.BN(1_000_000);
+      const now = nowSeconds();
+      // Cliff stream: starts now, cliff 60s from now, ends 120s from now
+      // Before cliff: nothing is vested, so funder should get almost everything back
+      const stream = await createStream({
+        totalAmount,
+        startTime: new anchor.BN(now),
+        endTime: new anchor.BN(now + 120),
+        cliffTime: new anchor.BN(now + 60),
+        vestingType: { cliff: {} },
+        nonce: new anchor.BN(61),
+      });
+
+      const funderBefore = BigInt(
+        (await provider.connection.getTokenAccountBalance(funderTokenAccount))
+          .value.amount
+      );
+
+      await program.methods
+        .cancelStream()
+        .accountsPartial({
+          vestingState: stream.vestingStatePda,
+          authorityRevoker: wallet.payer.publicKey,
+          treasuryReturnAddress: funderTokenAccount,
+          vestingTokenAccount: stream.vestingTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+
+      const state = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+
+      assert.isTrue(state.isRevoked);
+      // Before cliff, vested amount should be 0 or very small
+      const vested = Number(state.vestedAmountAtRevocation.toString());
+      assert.isAtMost(vested, 10_000); // Allow tiny timing variance
+
+      // Funder should get back nearly the full amount
+      const funderAfter = BigInt(
+        (await provider.connection.getTokenAccountBalance(funderTokenAccount))
+          .value.amount
+      );
+      const returned = Number(funderAfter - funderBefore);
+      assert.isAtLeast(returned, 990_000);
+    });
+
+    it("rejects cancel after full vest with StreamFullyVested", async () => {
+      const now = nowSeconds();
+      // Stream that has already ended (fully vested)
+      const stream = await createStream({
+        startTime: new anchor.BN(now - 200),
+        endTime: new anchor.BN(now - 100),
+        nonce: new anchor.BN(62),
+      });
+
+      await expectError(
+        () =>
+          program.methods
+            .cancelStream()
+            .accountsPartial({
+              vestingState: stream.vestingStatePda,
+              authorityRevoker: wallet.payer.publicKey,
+              treasuryReturnAddress: funderTokenAccount,
+              vestingTokenAccount: stream.vestingTokenAccount,
+              tokenProgram: TOKEN_PROGRAM_ID,
+            })
+            .rpc(),
+        "StreamFullyVested"
+      );
+    });
+
+    it("rejects cancel of already-cancelled stream with StreamCancelled", async () => {
+      const now = nowSeconds();
+      const stream = await createStream({
+        startTime: new anchor.BN(now - 50),
+        endTime: new anchor.BN(now + 50),
+        nonce: new anchor.BN(63),
+      });
+
+      // First cancel succeeds
+      await program.methods
+        .cancelStream()
+        .accountsPartial({
+          vestingState: stream.vestingStatePda,
+          authorityRevoker: wallet.payer.publicKey,
+          treasuryReturnAddress: funderTokenAccount,
+          vestingTokenAccount: stream.vestingTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+
+      // Second cancel should fail with StreamCancelled
+      await expectError(
+        () =>
+          program.methods
+            .cancelStream()
+            .accountsPartial({
+              vestingState: stream.vestingStatePda,
+              authorityRevoker: wallet.payer.publicKey,
+              treasuryReturnAddress: funderTokenAccount,
+              vestingTokenAccount: stream.vestingTokenAccount,
+              tokenProgram: TOKEN_PROGRAM_ID,
+            })
+            .rpc(),
+        "StreamCancelled"
+      );
+    });
+
+    it("rejects cancel by non-authority", async () => {
+      const now = nowSeconds();
+      const stream = await createStream({
+        startTime: new anchor.BN(now - 50),
+        endTime: new anchor.BN(now + 50),
+        nonce: new anchor.BN(64),
+      });
+
+      const impostor = anchor.web3.Keypair.generate();
+      const airdropSig = await provider.connection.requestAirdrop(
+        impostor.publicKey,
+        1_000_000_000
+      );
+      await provider.connection.confirmTransaction(airdropSig);
+
+      // The has_one = authority_revoker constraint should reject non-authority
+      await expectError(
+        () =>
+          program.methods
+            .cancelStream()
+            .accountsPartial({
+              vestingState: stream.vestingStatePda,
+              authorityRevoker: impostor.publicKey,
+              treasuryReturnAddress: funderTokenAccount,
+              vestingTokenAccount: stream.vestingTokenAccount,
+              tokenProgram: TOKEN_PROGRAM_ID,
+            })
+            .signers([impostor])
+            .rpc(),
+        "ConstraintHasOne"
+      );
+    });
+
+    it("allows withdrawal from cancelled stream for vested amount", async () => {
+      const totalAmount = new anchor.BN(1_000_000);
+      const now = nowSeconds();
+      // Stream started 50s ago, ends 50s from now => ~50% vested
+      const stream = await createStream({
+        totalAmount,
+        startTime: new anchor.BN(now - 50),
+        endTime: new anchor.BN(now + 50),
+        nonce: new anchor.BN(65),
+      });
+
+      // Cancel the stream
+      await program.methods
+        .cancelStream()
+        .accountsPartial({
+          vestingState: stream.vestingStatePda,
+          authorityRevoker: wallet.payer.publicKey,
+          treasuryReturnAddress: funderTokenAccount,
+          vestingTokenAccount: stream.vestingTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+
+      const cancelledState = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+      assert.isTrue(cancelledState.isRevoked);
+      const vestedAmount = BigInt(cancelledState.vestedAmountAtRevocation.toString());
+
+      // Recipient withdraws the vested amount
+      await withdraw(stream);
+
+      const finalState = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+      assert.equal(finalState.claimedAmount.toString(), vestedAmount.toString());
+
+      // Second withdrawal should fail — no more unlocked tokens
+      await expectError(
+        () => withdraw(stream),
+        "InsufficientUnlockedTokens"
+      );
+    });
+  });
+
+  // ── Property-based tests ──
+
+  describe("cliff vesting — property tests", () => {
+    // Property 1: Cliff gates withdrawals
+    // For any cliff stream, unlocked is zero before cliff_time.
+    // Test with multiple randomized cliff_time values.
+    it("Property 1: withdrawal before cliff_time always fails with InsufficientUnlockedTokens", async () => {
+      const totalAmount = new anchor.BN(1_000_000);
+      const cliffOffsets = [30, 45, 60, 90, 120, 180, 300]; // seconds into the future
+
+      for (let i = 0; i < cliffOffsets.length; i++) {
+        const now = nowSeconds();
+        const cliffOffset = cliffOffsets[i];
+        const stream = await createStream({
+          totalAmount,
+          startTime: new anchor.BN(now),
+          endTime: new anchor.BN(now + 600),
+          cliffTime: new anchor.BN(now + cliffOffset),
+          vestingType: { cliff: {} },
+          nonce: new anchor.BN(100 + i),
+        });
+
+        // Before cliff: no tokens should be unlocked
+        await expectError(
+          () => withdraw(stream),
+          "InsufficientUnlockedTokens"
+        );
+      }
+    });
+
+    // Property 2: Cliff falls through to linear
+    // For any cliff stream after cliff_time, unlocked matches the linear formula:
+    // total_amount * (now - start_time) / (end_time - start_time)
+    it("Property 2: after cliff_time, unlocked matches linear formula within ±5%", async () => {
+      const totalAmount = new anchor.BN(1_000_000);
+      // Each config: [startOffset (seconds ago), cliffOffset (seconds ago, must be <= startOffset), endOffset (seconds from now)]
+      // cliff has already passed in all cases
+      const configs = [
+        { startAgo: 60, cliffAgo: 30, endAhead: 60 },   // 50% through
+        { startAgo: 100, cliffAgo: 80, endAhead: 100 },  // 50% through
+        { startAgo: 40, cliffAgo: 20, endAhead: 160 },    // 20% through
+        { startAgo: 80, cliffAgo: 40, endAhead: 20 },     // 80% through
+        { startAgo: 50, cliffAgo: 50, endAhead: 50 },     // 50% through, cliff==start
+        { startAgo: 120, cliffAgo: 60, endAhead: 30 },    // 80% through
+        { startAgo: 30, cliffAgo: 10, endAhead: 270 },     // 10% through
+      ];
+
+      for (let i = 0; i < configs.length; i++) {
+        const { startAgo, cliffAgo, endAhead } = configs[i];
+        const now = nowSeconds();
+        const startTime = new anchor.BN(now - startAgo);
+        const endTime = new anchor.BN(now + endAhead);
+        const cliffTime = new anchor.BN(now - cliffAgo);
+
+        const stream = await createStream({
+          totalAmount,
+          startTime,
+          endTime,
+          cliffTime,
+          vestingType: { cliff: {} },
+          nonce: new anchor.BN(110 + i),
+        });
+
+        await withdraw(stream);
+
+        const state = await program.account.vestingState.fetch(
+          stream.vestingStatePda
+        );
+        const claimed = Number(state.claimedAmount.toString());
+
+        // Expected: totalAmount * (now - startTime) / (endTime - startTime)
+        // Use the actual start/end times from the stream (which may differ slightly)
+        const duration = endTime.toNumber() - startTime.toNumber();
+        // We can't know the exact block time, so compute expected based on stream params
+        // The actual elapsed time is approximately startAgo seconds
+        const expectedApprox = (totalAmount.toNumber() * startAgo) / duration;
+        const tolerance = expectedApprox * 0.05;
+
+        assert.isAtLeast(
+          claimed,
+          Math.floor(expectedApprox - tolerance),
+          `Cliff property 2 iteration ${i}: claimed ${claimed} too low, expected ~${expectedApprox}`
+        );
+        assert.isAtMost(
+          claimed,
+          Math.ceil(expectedApprox + tolerance),
+          `Cliff property 2 iteration ${i}: claimed ${claimed} too high, expected ~${expectedApprox}`
+        );
+      }
+    });
+  });
+
+  describe("milestone vesting — property tests", () => {
+    // Property 4: Milestone unlock is proportional
+    // For any milestone stream, unlocked equals total_amount * milestones_reached / milestone_count.
+    it("Property 4: claimed amount equals totalAmount * milestonesReached / milestoneCount", async () => {
+      const totalAmount = new anchor.BN(1_000_000);
+      const milestoneCounts = [2, 3, 4, 5];
+
+      let nonceCounter = 200;
+
+      for (const milestoneCount of milestoneCounts) {
+        // Test unlocking 1, then 2, ... up to milestoneCount milestones
+        const stream = await createStream({
+          totalAmount,
+          vestingType: { milestone: {} },
+          milestoneCount,
+          nonce: new anchor.BN(nonceCounter++),
+        });
+
+        let cumulativeClaimed = 0;
+
+        for (let reached = 1; reached <= milestoneCount; reached++) {
+          // Unlock one more milestone
+          await program.methods
+            .unlockMilestone()
+            .accountsPartial({
+              vestingState: stream.vestingStatePda,
+              authorityMilestone: wallet.payer.publicKey,
+            })
+            .rpc();
+
+          // Withdraw the newly unlocked amount
+          await withdraw(stream);
+
+          const state = await program.account.vestingState.fetch(
+            stream.vestingStatePda
+          );
+          const claimed = Number(state.claimedAmount.toString());
+
+          // Expected: totalAmount * reached / milestoneCount
+          const expected = Math.floor(
+            (totalAmount.toNumber() * reached) / milestoneCount
+          );
+
+          assert.equal(
+            claimed,
+            expected,
+            `Milestone property 4: count=${milestoneCount}, reached=${reached}, expected=${expected}, got=${claimed}`
+          );
+
+          cumulativeClaimed = claimed;
+        }
+
+        // After all milestones, total claimed should equal totalAmount
+        assert.equal(
+          cumulativeClaimed,
+          totalAmount.toNumber(),
+          `Milestone property 4: after all ${milestoneCount} milestones, claimed should equal totalAmount`
+        );
+      }
+    });
+  });
+
+  describe("cancel_stream — property tests", () => {
+    // Property 5: Cancel distributes correctly
+    // For any cancelled stream, recipient can withdraw exactly the vested amount
+    // and funder receives back exactly the unvested portion.
+    it("Property 5: cancel distributes vested to recipient and unvested to funder", async () => {
+      const totalAmount = new anchor.BN(1_000_000);
+      // Different vesting percentages: ~10%, ~30%, ~50%, ~70%
+      // startAgo / (startAgo + endAhead) gives approximate vesting %
+      const configs = [
+        { startAgo: 10, endAhead: 90, label: "~10%" },
+        { startAgo: 30, endAhead: 70, label: "~30%" },
+        { startAgo: 50, endAhead: 50, label: "~50%" },
+        { startAgo: 70, endAhead: 30, label: "~70%" },
+      ];
+
+      let nonceCounter = 300;
+
+      for (const { startAgo, endAhead, label } of configs) {
+        const now = nowSeconds();
+        const startTime = new anchor.BN(now - startAgo);
+        const endTime = new anchor.BN(now + endAhead);
+
+        const stream = await createStream({
+          totalAmount,
+          startTime,
+          endTime,
+          nonce: new anchor.BN(nonceCounter++),
+        });
+
+        // Record funder balance before cancel
+        const funderBefore = BigInt(
+          (await provider.connection.getTokenAccountBalance(funderTokenAccount))
+            .value.amount
+        );
+
+        // Cancel the stream
+        await program.methods
+          .cancelStream()
+          .accountsPartial({
+            vestingState: stream.vestingStatePda,
+            authorityRevoker: wallet.payer.publicKey,
+            treasuryReturnAddress: funderTokenAccount,
+            vestingTokenAccount: stream.vestingTokenAccount,
+            tokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .rpc();
+
+        // Fetch cancelled state
+        const cancelledState = await program.account.vestingState.fetch(
+          stream.vestingStatePda
+        );
+
+        assert.isTrue(cancelledState.isRevoked, `${label}: stream should be revoked`);
+
+        const vestedAtRevocation = BigInt(cancelledState.vestedAmountAtRevocation.toString());
+        const expectedUnvested = BigInt(totalAmount.toString()) - vestedAtRevocation;
+
+        // Verify vestedAmountAtRevocation is within ±5% of expected linear formula
+        const duration = endTime.toNumber() - startTime.toNumber();
+        const expectedVestedApprox = Math.floor(
+          (totalAmount.toNumber() * startAgo) / duration
+        );
+        const tolerance = expectedVestedApprox * 0.05;
+        const vestedNum = Number(vestedAtRevocation);
+
+        assert.isAtLeast(
+          vestedNum,
+          Math.floor(expectedVestedApprox - tolerance),
+          `${label}: vestedAtRevocation ${vestedNum} too low, expected ~${expectedVestedApprox}`
+        );
+        assert.isAtMost(
+          vestedNum,
+          Math.ceil(expectedVestedApprox + tolerance),
+          `${label}: vestedAtRevocation ${vestedNum} too high, expected ~${expectedVestedApprox}`
+        );
+
+        // Verify funder received back the unvested portion
+        const funderAfter = BigInt(
+          (await provider.connection.getTokenAccountBalance(funderTokenAccount))
+            .value.amount
+        );
+        const funderReceived = funderAfter - funderBefore;
+        assert.equal(
+          funderReceived.toString(),
+          expectedUnvested.toString(),
+          `${label}: funder should receive back totalAmount - vestedAmountAtRevocation`
+        );
+
+        // Verify recipient can withdraw exactly the vested amount
+        await withdraw(stream);
+
+        const finalState = await program.account.vestingState.fetch(
+          stream.vestingStatePda
+        );
+        assert.equal(
+          finalState.claimedAmount.toString(),
+          vestedAtRevocation.toString(),
+          `${label}: recipient should withdraw exactly vestedAmountAtRevocation`
+        );
+
+        // Verify no further withdrawal is possible
+        await expectError(
+          () => withdraw(stream),
+          "InsufficientUnlockedTokens"
+        );
+      }
     });
   });
 });
