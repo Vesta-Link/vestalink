@@ -40,6 +40,7 @@ a {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -47,6 +48,7 @@ textarea {
 button,
 a,
 input,
+select,
 textarea {
   outline: none;
 }
@@ -54,6 +56,7 @@ textarea {
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
+select:focus-visible,
 textarea:focus-visible {
   box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--foreground);
 }
@@ -296,6 +299,7 @@ textarea:focus-visible {
 
 .field,
 .field-grid {
+  min-width: 0;
   display: grid;
   gap: 7px;
 }
@@ -311,13 +315,42 @@ label {
 }
 
 input,
+select,
 textarea {
+  min-width: 0;
   width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--background);
   color: var(--foreground);
   padding: 12px 13px;
+  font-size: 14px;
+}
+
+select {
+  min-height: 46px;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--foreground) 50%),
+    linear-gradient(135deg, var(--foreground) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 19px, calc(100% - 13px) 19px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.faucet-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: var(--surface);
+}
+
+.faucet-card strong {
+  display: block;
+  margin-bottom: 4px;
   font-size: 14px;
 }
 
@@ -349,6 +382,63 @@ textarea::placeholder {
 .message.success {
   background: var(--foreground);
   color: var(--inverse);
+}
+
+.toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 30;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  width: min(420px, calc(100vw - 40px));
+  border: 1px solid var(--foreground);
+  border-radius: var(--radius);
+  padding: 14px;
+  background: var(--background);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
+}
+
+.toast.success {
+  background: var(--foreground);
+  color: var(--inverse);
+}
+
+.toast.error {
+  border-style: dashed;
+}
+
+.toast strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.toast p {
+  margin: 0;
+  color: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.toast a {
+  display: inline-flex;
+  margin-top: 8px;
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.toast button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 560;
 }
 
 .section-heading {

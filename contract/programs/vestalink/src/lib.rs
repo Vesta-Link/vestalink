@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::clock::Clock;
-use anchor_spl::token::{self, Token, TokenAccount, Transfer};
+use anchor_spl::token::{self, Mint, MintTo, Token, TokenAccount, Transfer};
 
 declare_id!("8q5LLVTGNUS16AV4xj6KPLet1M7y4xpa8XjxV7cHH98r");
 
@@ -62,7 +62,13 @@ pub mod vestalink {
     pub fn cancel_stream(ctx: Context<RevokeVesting>) -> Result<()> {
         cancel_stream_impl(ctx)
     }
+
+    pub fn request_vesta(ctx: Context<RequestVesta>) -> Result<()> {
+        request_vesta_impl(ctx)
+    }
 }
+
+const VESTA_FAUCET_AMOUNT: u64 = 10_000_000_000;
 
 fn create_stream_impl(
     ctx: Context<CreateVestingSchedule>,
@@ -238,6 +244,26 @@ fn cancel_stream_impl(ctx: Context<RevokeVesting>) -> Result<()> {
     }
 
     revoke_vesting_impl(ctx)
+}
+
+fn request_vesta_impl(ctx: Context<RequestVesta>) -> Result<()> {
+    let bump = [ctx.bumps.faucet_authority];
+    let seeds = &[b"vesta_faucet".as_ref(), &bump];
+    let signer_seeds = &[&seeds[..]];
+
+    let cpi_accounts = MintTo {
+        mint: ctx.accounts.vesta_mint.to_account_info(),
+        to: ctx.accounts.requester_token_account.to_account_info(),
+        authority: ctx.accounts.faucet_authority.to_account_info(),
+    };
+    let cpi_ctx = CpiContext::new_with_signer(
+        ctx.accounts.token_program.to_account_info(),
+        cpi_accounts,
+        signer_seeds,
+    );
+    token::mint_to(cpi_ctx, VESTA_FAUCET_AMOUNT)?;
+
+    Ok(())
 }
 
 fn current_unlocked_amount(vesting_state: &VestingState) -> Result<u64> {
@@ -418,6 +444,28 @@ pub struct RevokeVesting<'info> {
         constraint = vesting_token_account.owner == vesting_state.key() @ VestingError::InvalidVaultOwner
     )]
     pub vesting_token_account: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct RequestVesta<'info> {
+    #[account(mut)]
+    pub requester: Signer<'info>,
+
+    #[account(mut)]
+    pub vesta_mint: Account<'info, Mint>,
+
+    #[account(
+        mut,
+        constraint = requester_token_account.owner == requester.key() @ VestingError::InvalidTokenOwner,
+        constraint = requester_token_account.mint == vesta_mint.key() @ VestingError::InvalidTokenMint
+    )]
+    pub requester_token_account: Account<'info, TokenAccount>,
+
+    /// CHECK: PDA mint authority used only as a token-program signer.
+    #[account(seeds = [b"vesta_faucet"], bump)]
+    pub faucet_authority: UncheckedAccount<'info>,
 
     pub token_program: Program<'info, Token>,
 }

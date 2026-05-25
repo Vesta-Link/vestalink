@@ -34,6 +34,18 @@ export const VESTALINK_IDL = {
         { name: "token_program", address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" }
       ],
       args: []
+    },
+    {
+      name: "request_vesta",
+      discriminator: [86, 132, 89, 241, 247, 252, 249, 46],
+      accounts: [
+        { name: "requester", writable: true, signer: true },
+        { name: "vesta_mint", writable: true },
+        { name: "requester_token_account", writable: true },
+        { name: "faucet_authority", pda: { seeds: [{ kind: "const", value: [118, 101, 115, 116, 97, 95, 102, 97, 117, 99, 101, 116] }] } },
+        { name: "token_program", address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" }
+      ],
+      args: []
     }
   ],
   accounts: [

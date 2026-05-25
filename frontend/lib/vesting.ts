@@ -21,6 +21,8 @@ export const PROGRAM_ID = new PublicKey(
   process.env.NEXT_PUBLIC_VESTALINK_PROGRAM_ID ?? VESTALINK_IDL.address
 );
 export const EXPLORER_CLUSTER = "devnet";
+export const VESTA_MINT = new PublicKey("4zFYPYxDAio8BDPqfpAWhEMzpyPANxJABmbWPmBq6LKx");
+export const VESTA_FAUCET_AMOUNT = "10000";
 
 export type AppWallet = {
   publicKey: PublicKey;
@@ -162,6 +164,10 @@ export function deriveVestingPda(funder: PublicKey, recipient: PublicKey, nonce:
   )[0];
 }
 
+export function deriveVestaFaucetPda() {
+  return PublicKey.findProgramAddressSync([Buffer.from("vesta_faucet")], PROGRAM_ID)[0];
+}
+
 export function randomNonce() {
   const bytes = new Uint8Array(8);
   crypto.getRandomValues(bytes);
@@ -280,6 +286,38 @@ export async function buildWithdrawTransaction(params: {
   return new Transaction().add(createRecipientAta, withdraw);
 }
 
+export async function buildRequestVestaTransaction(params: {
+  connection: Connection;
+  wallet: AppWallet;
+}) {
+  const provider = getProvider(params.connection, params.wallet);
+  const program = getProgram(provider);
+  const requesterTokenAccount = getAssociatedTokenAddressSync(VESTA_MINT, params.wallet.publicKey);
+  const faucetAuthority = deriveVestaFaucetPda();
+
+  const createRequesterAta = createAssociatedTokenAccountIdempotentInstruction(
+    params.wallet.publicKey,
+    requesterTokenAccount,
+    params.wallet.publicKey,
+    VESTA_MINT,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID
+  );
+
+  const requestVesta = await program.methods
+    .requestVesta()
+    .accountsPartial({
+      requester: params.wallet.publicKey,
+      vestaMint: VESTA_MINT,
+      requesterTokenAccount,
+      faucetAuthority,
+      tokenProgram: TOKEN_PROGRAM_ID
+    })
+    .instruction();
+
+  return new Transaction().add(createRequesterAta, requestVesta);
+}
+
 export async function prepareUnsignedTransaction(params: {
   connection: Connection;
   transaction: Transaction;
@@ -380,7 +418,35 @@ async function resolveVault(connection: Connection, vestingState: PublicKey) {
 }
 
 export function serializeTransactionError(error: unknown) {
-  if (error instanceof Error) return error.message;
+  const rawMessage =
+    error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  const message = rawMessage.toLowerCase();
+
+  if (/reject|cancel|declined|denied/.test(message)) {
+    return "Transaction was rejected in your wallet.";
+  }
+
+  if (/insufficient|0x1|attempt to debit|no prior credit|funds/.test(message)) {
+    return "Your wallet does not have enough devnet SOL to pay transaction fees. Please request devnet SOL and try again.";
+  }
+
+  if (/method not found|unknown instruction|instruction fallback|requestvesta|request_vesta/.test(message)) {
+    return "The deployed contract does not support Request VESTA yet. Please contact the team.";
+  }
+
+  if (/blockhash|timeout|network|fetch|rpc|503|504|429/.test(message)) {
+    return "Devnet RPC is not responding. Please wait a moment and try again.";
+  }
+
+  if (/mint|token account|owner does not match|invalid account data/.test(message)) {
+    return "VESTA token setup is not valid. Please contact the team.";
+  }
+
+  if (/internal error|unexpected error/.test(message)) {
+    return "Something went wrong while sending the transaction. Please try again or share this error with the team.";
+  }
+
+  if (rawMessage) return rawMessage;
   return "Transaction failed. Please try again.";
 }
 

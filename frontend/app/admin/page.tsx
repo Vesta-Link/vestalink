@@ -1,6 +1,6 @@
 "use client";
 
-import { RefreshCw, Send } from "lucide-react";
+import { Coins, RefreshCw, Send } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import bs58 from "bs58";
 
@@ -12,19 +12,47 @@ import {
 } from "@/components/privy-provider";
 import {
   buildCreateStreamTransaction,
+  buildRequestVestaTransaction,
+  explorerUrl,
   fetchStreams,
   parseCsvRows,
   prepareUnsignedTransaction,
   getConnection,
   serializeTransactionError,
+  VESTA_FAUCET_AMOUNT,
+  VESTA_MINT,
   type StreamView
 } from "@/lib/vesting";
 import { PublicKey } from "@solana/web3.js";
 
+const TEST_TOKEN_PRESETS = [
+  {
+    label: "VESTA test token",
+    mint: VESTA_MINT.toBase58(),
+    description: "Devnet dummy SPL token for testing the vesting workflow."
+  }
+];
+
+type FaucetToast = {
+  type: "success" | "error";
+  title: string;
+  message: string;
+  signature?: string;
+};
+
 function defaultDate(minutesFromNow: number) {
   const date = new Date(Date.now() + minutesFromNow * 60 * 1000);
   date.setSeconds(0, 0);
-  return date.toISOString().slice(0, 16);
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60 * 1000);
+  return offsetDate.toISOString().slice(0, 16);
+}
+
+function parseLocalDateTime(value: string, label: string) {
+  const time = new Date(value).getTime();
+  if (Number.isNaN(time)) {
+    throw new Error(`${label} date is invalid.`);
+  }
+  return Math.floor(time / 1000);
 }
 
 export default function AdminPage() {
@@ -51,14 +79,17 @@ function AdminPageInner() {
   const { wallet, publicKey } = useActiveSolanaWallet();
   const { signAndSendTransaction } = useSignAndSendTransaction();
   const [mint, setMint] = useState("");
+  const [selectedPreset, setSelectedPreset] = useState("");
   const [rows, setRows] = useState("");
   const [start, setStart] = useState(defaultDate(5));
   const [end, setEnd] = useState(defaultDate(60 * 24 * 30));
   const [streams, setStreams] = useState<StreamView[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRequestingVesta, setIsRequestingVesta] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [faucetToast, setFaucetToast] = useState<FaucetToast | null>(null);
 
   const adminStreams = useMemo(() => {
     if (!publicKey) return [];
@@ -99,8 +130,8 @@ function AdminPageInner() {
         wallet: { publicKey },
         mint: new PublicKey(mint.trim()),
         rows: parsedRows,
-        startTime: Math.floor(new Date(start).getTime() / 1000),
-        endTime: Math.floor(new Date(end).getTime() / 1000)
+        startTime: parseLocalDateTime(start, "Start"),
+        endTime: parseLocalDateTime(end, "End")
       });
 
       const prepared = await prepareUnsignedTransaction({
@@ -132,8 +163,93 @@ function AdminPageInner() {
     }
   }
 
+  function selectPreset(value: string) {
+    setSelectedPreset(value);
+    if (value) {
+      setMint(value);
+    }
+  }
+
+  async function requestVesta() {
+    setError("");
+    setSuccess("");
+    setFaucetToast(null);
+
+    if (!wallet || !publicKey) {
+      setFaucetToast({
+        type: "error",
+        title: "Request failed",
+        message: "Connect an admin wallet first."
+      });
+      return;
+    }
+
+    let signature = "";
+    try {
+      setIsRequestingVesta(true);
+      const transaction = await buildRequestVestaTransaction({
+        connection,
+        wallet: { publicKey }
+      });
+      const prepared = await prepareUnsignedTransaction({
+        connection,
+        transaction,
+        feePayer: publicKey
+      });
+      const result = await signAndSendTransaction({
+        transaction: prepared.bytes,
+        wallet,
+        chain: "solana:devnet"
+      });
+      signature = bs58.encode(result.signature);
+      await connection.confirmTransaction(
+        {
+          signature,
+          blockhash: prepared.blockhash,
+          lastValidBlockHeight: prepared.lastValidBlockHeight
+        },
+        "confirmed"
+      );
+      setSelectedPreset(VESTA_MINT.toBase58());
+      setMint(VESTA_MINT.toBase58());
+      setFaucetToast({
+        type: "success",
+        title: "VESTA requested",
+        message: `Minted ${VESTA_FAUCET_AMOUNT} VESTA to your wallet.`,
+        signature
+      });
+    } catch (err) {
+      setFaucetToast({
+        type: "error",
+        title: "Request failed",
+        message: serializeTransactionError(err),
+        signature: signature || undefined
+      });
+    } finally {
+      setIsRequestingVesta(false);
+    }
+  }
+
   return (
-    <main className="page-shell two-column">
+    <>
+      {faucetToast && (
+        <div className={`toast ${faucetToast.type}`} role="status" aria-live="polite">
+          <div>
+            <strong>{faucetToast.title}</strong>
+            <p>{faucetToast.message}</p>
+            {faucetToast.signature && (
+              <a href={explorerUrl(faucetToast.signature, "tx")} target="_blank" rel="noreferrer">
+                Tx {faucetToast.signature.slice(0, 8)}...{faucetToast.signature.slice(-8)}
+              </a>
+            )}
+          </div>
+          <button type="button" onClick={() => setFaucetToast(null)} aria-label="Dismiss">
+            Close
+          </button>
+        </div>
+      )}
+
+      <main className="page-shell two-column">
       <section className="panel form-panel">
         <p className="eyebrow">Admin</p>
         <h1>Create vesting streams</h1>
@@ -143,6 +259,45 @@ function AdminPageInner() {
         </p>
 
         <form className="stack" onSubmit={onSubmit} aria-busy={isSubmitting}>
+          <div className="field">
+            <label htmlFor="token-preset">Token preset</label>
+            <select
+              id="token-preset"
+              value={selectedPreset}
+              onChange={(event) => selectPreset(event.target.value)}
+            >
+              <option value="">Custom SPL token</option>
+              {TEST_TOKEN_PRESETS.map((preset) => (
+                <option key={preset.mint} value={preset.mint}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+            {selectedPreset && (
+              <p className="hint">
+                {TEST_TOKEN_PRESETS.find((preset) => preset.mint === selectedPreset)?.description}
+              </p>
+            )}
+          </div>
+
+          {selectedPreset === VESTA_MINT.toBase58() && (
+            <div className="faucet-card">
+              <div>
+                <strong>Need test tokens?</strong>
+                <p className="hint">Mint {VESTA_FAUCET_AMOUNT} VESTA to your connected wallet.</p>
+              </div>
+              <button
+                className="button secondary compact"
+                type="button"
+                onClick={requestVesta}
+                disabled={isRequestingVesta}
+              >
+                <Coins size={15} aria-hidden="true" />
+                {isRequestingVesta ? "Requesting..." : "Request VESTA"}
+              </button>
+            </div>
+          )}
+
           <div className="field">
             <label htmlFor="mint">Token mint</label>
             <input
@@ -232,6 +387,7 @@ function AdminPageInner() {
           </div>
         )}
       </section>
-    </main>
+      </main>
+    </>
   );
 }
