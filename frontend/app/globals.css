@@ -40,21 +40,24 @@ a {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
 button,
 a,
 input,
-textarea {
+textarea,
+select {
   outline: none;
 }
 
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+select:focus-visible {
   box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--foreground);
 }
 
@@ -311,14 +314,22 @@ label {
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--background);
   color: var(--foreground);
   padding: 12px 13px;
   font-size: 14px;
+}
+
+select {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 textarea {

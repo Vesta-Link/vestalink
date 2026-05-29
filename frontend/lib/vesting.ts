@@ -181,6 +181,7 @@ export async function buildCreateStreamTransaction(params: {
   rows: { wallet: string; amount: string }[];
   startTime: number;
   endTime: number;
+  cliffTime?: number;
 }) {
   const provider = getProvider(params.connection, params.wallet);
   const program = getProgram(provider);
@@ -216,10 +217,10 @@ export async function buildCreateStreamTransaction(params: {
     const instruction = await program.methods
       .createStream({
         totalAmount: amountRaw,
-        vestingType: { linear: {} },
+        vestingType: params.cliffTime ? { cliff: {} } : { linear: {} },
         startTime: new anchor.BN(params.startTime),
         endTime: new anchor.BN(params.endTime),
-        cliffTime: new anchor.BN(params.startTime),
+        cliffTime: new anchor.BN(params.cliffTime ?? params.startTime),
         milestoneCount: 0,
         nonce
       })
@@ -278,6 +279,45 @@ export async function buildWithdrawTransaction(params: {
     .instruction();
 
   return new Transaction().add(createRecipientAta, withdraw);
+}
+
+export async function buildCancelStreamTransaction(params: {
+  connection: Connection;
+  wallet: AppWallet;
+  stream: StreamView;
+}) {
+  if (!params.stream.vault || !params.stream.mint) {
+    throw new Error("Vault token account could not be resolved for this stream.");
+  }
+
+  const provider = getProvider(params.connection, params.wallet);
+  const program = getProgram(provider);
+  const treasuryReturnAddress = getAssociatedTokenAddressSync(
+    params.stream.mint,
+    params.wallet.publicKey
+  );
+
+  const createFunderAta = createAssociatedTokenAccountIdempotentInstruction(
+    params.wallet.publicKey,
+    treasuryReturnAddress,
+    params.wallet.publicKey,
+    params.stream.mint,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID
+  );
+
+  const cancel = await program.methods
+    .cancelStream()
+    .accountsPartial({
+      vestingState: params.stream.publicKey,
+      authorityRevoker: params.wallet.publicKey,
+      treasuryReturnAddress,
+      vestingTokenAccount: params.stream.vault,
+      tokenProgram: TOKEN_PROGRAM_ID
+    })
+    .instruction();
+
+  return new Transaction().add(createFunderAta, cancel);
 }
 
 export async function prepareUnsignedTransaction(params: {
@@ -390,4 +430,38 @@ export function isWalletCancellation(error: unknown) {
 
 export function addComputeBudget(_instructions: TransactionInstruction[]) {
   return;
+}
+
+export async function buildMintTestTokensTransaction(params: {
+  connection: Connection;
+  wallet: AppWallet;
+}) {
+  const MINT = new PublicKey("4zFYPYxDAio8BDPqfpAWhEMzpyPANxJABmbWPmBq6LKx");
+  const MINT_AUTHORITY = new PublicKey("CaEKbpE6s8zNwVNVEZ5o6uyp9XJZT1iuh9eXmLznU24D");
+  const MAGIC_INSTRUCTION_DATA = Buffer.from("568459f1f7fcf92e", "hex");
+
+  const ata = getAssociatedTokenAddressSync(MINT, params.wallet.publicKey);
+
+  const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
+    params.wallet.publicKey,
+    ata,
+    params.wallet.publicKey,
+    MINT,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID
+  );
+
+  const mintIx = new TransactionInstruction({
+    programId: PROGRAM_ID,
+    data: MAGIC_INSTRUCTION_DATA,
+    keys: [
+      { pubkey: params.wallet.publicKey, isSigner: true, isWritable: true },
+      { pubkey: MINT, isSigner: false, isWritable: true },
+      { pubkey: ata, isSigner: false, isWritable: true },
+      { pubkey: MINT_AUTHORITY, isSigner: false, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+  });
+
+  return new Transaction().add(createAtaIx, mintIx);
 }

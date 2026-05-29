@@ -26,9 +26,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </nav>
             <div className="header-actions">
               <span className="network-pill">Devnet</span>
-              <span className="program-pill" title={PROGRAM_ID.toBase58()}>
+              {/* <span className="program-pill" title={PROGRAM_ID.toBase58()}>
                 {shorten(PROGRAM_ID)}
-              </span>
+              </span> */}
               <ConnectButton />
             </div>
           </header>

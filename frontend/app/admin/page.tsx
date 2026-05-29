@@ -1,6 +1,6 @@
 "use client";
 
-import { RefreshCw, Send } from "lucide-react";
+import { RefreshCw, Send, Coins } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import bs58 from "bs58";
 
@@ -12,11 +12,13 @@ import {
 } from "@/components/privy-provider";
 import {
   buildCreateStreamTransaction,
+  buildCancelStreamTransaction,
   fetchStreams,
   parseCsvRows,
   prepareUnsignedTransaction,
   getConnection,
   serializeTransactionError,
+  buildMintTestTokensTransaction,
   type StreamView
 } from "@/lib/vesting";
 import { PublicKey } from "@solana/web3.js";
@@ -54,11 +56,15 @@ function AdminPageInner() {
   const [rows, setRows] = useState("");
   const [start, setStart] = useState(defaultDate(5));
   const [end, setEnd] = useState(defaultDate(60 * 24 * 30));
+  const [cliff, setCliff] = useState("");
+  const [preset, setPreset] = useState("");
   const [streams, setStreams] = useState<StreamView[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [canceling, setCanceling] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [isMinting, setIsMinting] = useState(false);
 
   const adminStreams = useMemo(() => {
     if (!publicKey) return [];
@@ -100,7 +106,8 @@ function AdminPageInner() {
         mint: new PublicKey(mint.trim()),
         rows: parsedRows,
         startTime: Math.floor(new Date(start).getTime() / 1000),
-        endTime: Math.floor(new Date(end).getTime() / 1000)
+        endTime: Math.floor(new Date(end).getTime() / 1000),
+        cliffTime: cliff ? Math.floor(new Date(cliff).getTime() / 1000) : undefined
       });
 
       const prepared = await prepareUnsignedTransaction({
@@ -132,6 +139,49 @@ function AdminPageInner() {
     }
   }
 
+  async function cancel(stream: StreamView) {
+    if (!wallet || !publicKey) return;
+    if (!window.confirm("Are you sure you want to cancel this stream? Unvested tokens will be returned to you.")) return;
+    setError("");
+    setSuccess("");
+    setCanceling(stream.publicKey.toBase58());
+    try {
+      const transaction = await buildCancelStreamTransaction({ connection, wallet: { publicKey }, stream });
+      const prepared = await prepareUnsignedTransaction({ connection, transaction, feePayer: publicKey });
+      const result = await signAndSendTransaction({ transaction: prepared.bytes, wallet, chain: "solana:devnet" });
+      const signature = bs58.encode(result.signature);
+      await connection.confirmTransaction({ signature, blockhash: prepared.blockhash, lastValidBlockHeight: prepared.lastValidBlockHeight }, "confirmed");
+      setSuccess("Stream cancelled successfully.");
+      await loadStreams();
+    } catch (err) {
+      setError(serializeTransactionError(err));
+    } finally {
+      setCanceling("");
+    }
+  }
+
+  async function handleMintTestTokens() {
+    if (!wallet || !publicKey) {
+      setError("Connect an admin wallet first.");
+      return;
+    }
+    setError("");
+    setSuccess("");
+    setIsMinting(true);
+    try {
+      const transaction = await buildMintTestTokensTransaction({ connection, wallet: { publicKey } });
+      const prepared = await prepareUnsignedTransaction({ connection, transaction, feePayer: publicKey });
+      const result = await signAndSendTransaction({ transaction: prepared.bytes, wallet, chain: "solana:devnet" });
+      const signature = bs58.encode(result.signature);
+      await connection.confirmTransaction({ signature, blockhash: prepared.blockhash, lastValidBlockHeight: prepared.lastValidBlockHeight }, "confirmed");
+      setSuccess("Successfully minted 10,000 VESTA test tokens.");
+    } catch (err) {
+      setError(serializeTransactionError(err));
+    } finally {
+      setIsMinting(false);
+    }
+  }
+
   return (
     <main className="page-shell two-column">
       <section className="panel form-panel">
@@ -144,11 +194,62 @@ function AdminPageInner() {
 
         <form className="stack" onSubmit={onSubmit} aria-busy={isSubmitting}>
           <div className="field">
+            <label htmlFor="preset">Token preset</label>
+            <select
+              id="preset"
+              value={preset}
+              onChange={(e) => {
+                setPreset(e.target.value);
+                if (e.target.value !== "") setMint(e.target.value);
+              }}
+            >
+              <option value="4zFYPYxDAio8BDPqfpAWhEMzpyPANxJABmbWPmBq6LKx">VESTA test token</option>
+              <option value="">Custom Mint</option>
+            </select>
+          </div>
+
+          {preset === "4zFYPYxDAio8BDPqfpAWhEMzpyPANxJABmbWPmBq6LKx" && (
+            <div className="stack" style={{ marginTop: "-8px" }}>
+              <p className="hint">Devnet dummy SPL token for testing the vesting workflow.</p>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "16px",
+                  border: "1px dashed var(--border)",
+                  borderRadius: "var(--radius)",
+                  backgroundColor: "var(--surface)",
+                  marginTop: "-4px"
+                }}
+              >
+                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  <strong style={{ fontSize: "15px" }}>Need test tokens?</strong>
+                  <p className="hint">Mint 10000 VESTA to your connected wallet.</p>
+                </div>
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={isMinting}
+                  onClick={handleMintTestTokens}
+                >
+                  <Coins size={16} aria-hidden="true" />
+                  {isMinting ? "Requesting..." : "Request VESTA"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="field">
             <label htmlFor="mint">Token mint</label>
             <input
               id="mint"
               value={mint}
-              onChange={(event) => setMint(event.target.value)}
+              onChange={(event) => {
+                setMint(event.target.value);
+                setPreset("");
+              }}
               placeholder="Devnet SPL mint address"
               spellCheck={false}
               required
@@ -192,6 +293,16 @@ function AdminPageInner() {
             </div>
           </div>
 
+          <div className="field">
+            <label htmlFor="cliff">Cliff (optional)</label>
+            <input
+              id="cliff"
+              type="datetime-local"
+              value={cliff}
+              onChange={(event) => setCliff(event.target.value)}
+            />
+          </div>
+
           {error && <p className="message error">{error}</p>}
           {success && <p className="message success">{success}</p>}
 
@@ -226,9 +337,26 @@ function AdminPageInner() {
           </div>
         ) : (
           <div className="stream-list">
-            {adminStreams.map((stream) => (
-              <StreamCard key={stream.publicKey.toBase58()} stream={stream} mode="admin" />
-            ))}
+            {adminStreams.map((stream) => {
+              const isCanceling = canceling === stream.publicKey.toBase58();
+              return (
+                <StreamCard
+                  key={stream.publicKey.toBase58()}
+                  stream={stream}
+                  mode="admin"
+                  action={
+                    <button
+                      className="button secondary compact"
+                      type="button"
+                      disabled={stream.status === "complete" || stream.status === "revoked" || isCanceling}
+                      onClick={() => cancel(stream)}
+                    >
+                      {isCanceling ? "Canceling..." : "Cancel"}
+                    </button>
+                  }
+                />
+              );
+            })}
           </div>
         )}
       </section>
