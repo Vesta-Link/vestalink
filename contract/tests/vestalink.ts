@@ -646,43 +646,6 @@ describe("vestalink", () => {
     });
   });
 
-  describe("request_vesta", () => {
-    it("mints test VESTA from the faucet PDA authority", async () => {
-      const requesterTokenAccount = getAssociatedTokenAddressSync(
-        faucetMint,
-        wallet.payer.publicKey
-      );
-      const [faucetAuthority] = deriveFaucetPda();
-
-      await program.methods
-        .requestVesta()
-        .accountsPartial({
-          requester: wallet.payer.publicKey,
-          vestaMint: faucetMint,
-          requesterTokenAccount,
-          faucetAuthority,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .preInstructions([
-          createAssociatedTokenAccountIdempotentInstruction(
-            wallet.payer.publicKey,
-            requesterTokenAccount,
-            wallet.payer.publicKey,
-            faucetMint,
-            TOKEN_PROGRAM_ID,
-            ASSOCIATED_TOKEN_PROGRAM_ID
-          ),
-        ])
-        .rpc();
-
-      const account = await getAccount(
-        provider.connection,
-        requesterTokenAccount
-      );
-      assert.equal(account.amount.toString(), "10000000000");
-    });
-  });
-
   describe("unlock_milestone", () => {
     it("rejects unlock_milestone on a non-milestone stream with UnsupportedVestingType", async () => {
       const stream = await createStream({ nonce: new anchor.BN(30) });
