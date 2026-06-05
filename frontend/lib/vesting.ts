@@ -94,7 +94,7 @@ export function getProvider(connection: Connection, wallet: AppWallet) {
     }
   };
 
-  return new anchor.AnchorProvider(connection, readonlyWallet as unknown as anchor.Wallet, {
+  return new anchor.AnchorProvider(connection, readonlyWallet, {
     commitment: "confirmed",
     preflightCommitment: "confirmed"
   });
@@ -119,7 +119,7 @@ export function parseCsvRows(value: string) {
 }
 
 export function decimalToRaw(amount: string, decimals: number) {
-  const normalized = amount.replace(/,/g, "").trim();
+  const normalized = amount.replaceAll(',', "").trim();
   if (!/^\d+(\.\d+)?$/.test(normalized)) {
     throw new Error(`Invalid amount "${amount}".`);
   }
@@ -187,6 +187,7 @@ export async function buildCreateStreamTransaction(params: {
   rows: { wallet: string; amount: string }[];
   startTime: number;
   endTime: number;
+  cliffTime?: number;
 }) {
   const provider = getProvider(params.connection, params.wallet);
   const program = getProgram(provider);
@@ -219,13 +220,17 @@ export async function buildCreateStreamTransaction(params: {
       )
     );
 
+    const resolvedCliff = params.cliffTime ?? params.startTime;
+    const vestingType =
+      resolvedCliff > params.startTime ? { cliff: {} } : { linear: {} };
+
     const instruction = await program.methods
       .createStream({
         totalAmount: amountRaw,
-        vestingType: { linear: {} },
+        vestingType,
         startTime: new anchor.BN(params.startTime),
         endTime: new anchor.BN(params.endTime),
-        cliffTime: new anchor.BN(params.startTime),
+        cliffTime: new anchor.BN(resolvedCliff),
         milestoneCount: 0,
         nonce
       })
@@ -284,6 +289,35 @@ export async function buildWithdrawTransaction(params: {
     .instruction();
 
   return new Transaction().add(createRecipientAta, withdraw);
+}
+
+export async function buildCancelStreamTransaction(params: {
+  connection: Connection;
+  wallet: AppWallet;
+  stream: StreamView;
+}) {
+  if (!params.stream.vault || !params.stream.mint) {
+    throw new Error("Vault token account could not be resolved for this stream.");
+  }
+
+  const provider = getProvider(params.connection, params.wallet);
+  const program = getProgram(provider);
+
+  // The treasury return address was set at creation time to the funder's ATA
+  const treasuryReturnAddress = params.stream.account.treasuryReturnAddress;
+
+  const cancel = await program.methods
+    .cancelStream()
+    .accountsPartial({
+      vestingState: params.stream.publicKey,
+      authorityRevoker: params.wallet.publicKey,
+      treasuryReturnAddress,
+      vestingTokenAccount: params.stream.vault,
+      tokenProgram: TOKEN_PROGRAM_ID
+    })
+    .instruction();
+
+  return new Transaction().add(cancel);
 }
 
 export async function buildRequestVestaTransaction(params: {
@@ -349,7 +383,7 @@ export async function fetchStreams(connection: Connection) {
 
   return Promise.all(
     rows.map(async (row) => {
-      const account = row.account as VestalinkAccount;
+      const account = row.account;
       const now = Math.floor(Date.now() / 1000);
       const total = BigInt(account.totalAmount.toString());
       const claimed = BigInt(account.claimedAmount.toString());
@@ -418,8 +452,8 @@ async function resolveVault(connection: Connection, vestingState: PublicKey) {
 }
 
 export function serializeTransactionError(error: unknown) {
-  const rawMessage =
-    error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  const stringifiedError = typeof error === "string" ? error : "";
+  const rawMessage = error instanceof Error ? error.message : stringifiedError;
   const message = rawMessage.toLowerCase();
 
   if (/reject|cancel|declined|denied/.test(message)) {
