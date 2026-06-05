@@ -1,11 +1,12 @@
 "use client";
 
-import { PrivyProvider, useLogin, useLogout, usePrivy } from "@privy-io/react-auth";
+import { PrivyProvider, useLogin, usePrivy } from "@privy-io/react-auth";
 import {
   toSolanaWalletConnectors,
   useSignAndSendTransaction,
   useWallets
 } from "@privy-io/react-auth/solana";
+import { UserPill } from "@privy-io/react-auth/ui";
 import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
 import { PublicKey } from "@solana/web3.js";
 import { ReactNode, useMemo } from "react";
@@ -67,7 +68,6 @@ export function ConnectButton() {
 function PrivyConnectButton() {
   const { ready, authenticated, user } = usePrivy();
   const { login } = useLogin();
-  const { logout } = useLogout();
   const { wallet, address } = useActiveSolanaWallet();
 
   if (!ready) {
@@ -87,9 +87,13 @@ function PrivyConnectButton() {
   }
 
   return (
-    <button className="button primary" type="button" onClick={logout}>
-      {address ? shorten(address) : wallet?.standardWallet.name ?? user?.email?.address ?? "Disconnect"}
-    </button>
+    <div className="privy-user-pill">
+      <UserPill
+        expanded
+        label={address ? shorten(address) : wallet?.standardWallet.name ?? user?.email?.address}
+        ui={{ minimal: true, background: "accent" }}
+      />
+    </div>
   );
 }
 

@@ -110,6 +110,17 @@ textarea:focus-visible {
   gap: 8px;
 }
 
+.privy-user-pill {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.privy-user-pill button {
+  min-height: 40px;
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
 .network-pill,
 .status-pill,
 .token-label {
