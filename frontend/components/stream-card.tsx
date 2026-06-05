@@ -9,19 +9,43 @@ import {
   type StreamView
 } from "@/lib/vesting";
 
+function formatTimeRemaining(endTime: { toNumber: () => number }) {
+  const now = Math.floor(Date.now() / 1000);
+  const end = endTime.toNumber();
+  const diff = end - now;
+  if (diff <= 0) return "Ended";
+  const days = Math.floor(diff / 86_400);
+  const hours = Math.floor((diff % 86_400) / 3_600);
+  const minutes = Math.floor((diff % 3_600) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
 export function StreamCard({
   stream,
   mode,
-  action
-}: {
+  action,
+  onCancel,
+  isCancelling
+}: Readonly<{
   stream: StreamView;
   mode: "admin" | "recipient";
   action?: React.ReactNode;
-}) {
+  onCancel?: () => void;
+  isCancelling?: boolean;
+}>) {
   const { account } = stream;
   const counterparty = mode === "admin" ? account.recipient : account.funder;
   const claimed = rawToDecimal(account.claimedAmount, stream.decimals);
   const total = rawToDecimal(account.totalAmount, stream.decimals);
+  const claimable = rawToDecimal(stream.claimableRaw, stream.decimals);
+
+  const canCancel =
+    onCancel &&
+    !stream.account.isRevoked &&
+    stream.status !== "complete" &&
+    stream.status !== "revoked";
 
   return (
     <article className="stream-card">
@@ -55,12 +79,16 @@ export function StreamCard({
           <strong>{rawToDecimal(stream.unlockedRaw, stream.decimals)}</strong>
         </div>
         <div>
-          <span className="label">Locked</span>
-          <strong>{rawToDecimal(stream.lockedRaw, stream.decimals)}</strong>
-        </div>
-        <div>
           <span className="label">Claimed</span>
           <strong>{claimed}</strong>
+        </div>
+        <div>
+          <span className="label">Claimable</span>
+          <strong>{claimable}</strong>
+        </div>
+        <div>
+          <span className="label">Remaining</span>
+          <strong>{formatTimeRemaining(account.endTime)}</strong>
         </div>
       </div>
 
@@ -71,7 +99,19 @@ export function StreamCard({
 
       <div className="stream-footer">
         <span className="token-label">{stream.symbol}</span>
-        {action}
+        <div className="stream-footer-actions">
+          {canCancel && (
+            <button
+              className="button secondary compact"
+              type="button"
+              disabled={isCancelling}
+              onClick={onCancel}
+            >
+              {isCancelling ? "Cancelling…" : "Cancel"}
+            </button>
+          )}
+          {action}
+        </div>
       </div>
     </article>
   );

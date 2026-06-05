@@ -46,6 +46,18 @@ export const VESTALINK_IDL = {
         { name: "token_program", address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" }
       ],
       args: []
+    },
+    {
+      name: "cancel_stream",
+      discriminator: [218, 221, 38, 25, 177, 207, 188, 91],
+      accounts: [
+        { name: "vesting_state", writable: true },
+        { name: "authority_revoker", signer: true },
+        { name: "treasury_return_address", writable: true },
+        { name: "vesting_token_account", writable: true },
+        { name: "token_program", address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" }
+      ],
+      args: []
     }
   ],
   accounts: [
