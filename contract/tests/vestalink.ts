@@ -1527,4 +1527,425 @@ describe("vestalink", () => {
       assert.equal(account.amount.toString(), "10000000000");
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Integration — Full Flow
+  // Tests the complete lifecycle: create_stream → (wait) → withdraw → verify
+  // recipient token balance delta and vault balance delta exactly match the
+  // claimed amount reported by on-chain state.
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  describe("integration — full flow", () => {
+    it("full flow: create → partial withdraw → verify balance delta → wait → full withdraw → verify total", async () => {
+      const totalAmount = new anchor.BN(1_000_000);
+      const now = nowSeconds();
+      // Stream: started 5s ago, ends 15s from now → 20s total, ~25% elapsed at creation
+      const stream = await createStream({
+        totalAmount,
+        startTime: new anchor.BN(now - 5),
+        endTime: new anchor.BN(now + 15),
+        nonce: new anchor.BN(400),
+      });
+
+      // ── Step 1: Capture pre-withdraw balances ──
+      const recipientBefore = BigInt(
+        (
+          await provider.connection.getTokenAccountBalance(
+            stream.recipientTokenAccount
+          )
+        ).value.amount
+      );
+      const vaultBefore = BigInt(
+        (
+          await provider.connection.getTokenAccountBalance(
+            stream.vestingTokenAccount
+          )
+        ).value.amount
+      );
+
+      // ── Step 2: First partial withdraw ──
+      await withdraw(stream);
+
+      const stateAfterFirst = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+      const firstClaimed = BigInt(stateAfterFirst.claimedAmount.toString());
+      assert.isAbove(Number(firstClaimed), 0, "First claim must be > 0");
+      assert.isBelow(
+        Number(firstClaimed),
+        totalAmount.toNumber(),
+        "First claim must be < totalAmount (stream not ended)"
+      );
+
+      // ── Step 3: Verify token balance deltas ──
+      const recipientAfterFirst = BigInt(
+        (
+          await provider.connection.getTokenAccountBalance(
+            stream.recipientTokenAccount
+          )
+        ).value.amount
+      );
+      const vaultAfterFirst = BigInt(
+        (
+          await provider.connection.getTokenAccountBalance(
+            stream.vestingTokenAccount
+          )
+        ).value.amount
+      );
+
+      assert.equal(
+        (recipientAfterFirst - recipientBefore).toString(),
+        firstClaimed.toString(),
+        "Recipient balance should increase by exactly claimedAmount"
+      );
+      assert.equal(
+        (vaultBefore - vaultAfterFirst).toString(),
+        firstClaimed.toString(),
+        "Vault balance should decrease by exactly claimedAmount"
+      );
+
+      // ── Step 4: Wait for stream to fully vest ──
+      await sleep(17_000); // stream ends 15s from creation, wait a bit extra
+
+      // ── Step 5: Final withdraw — drain remaining ──
+      await withdraw(stream);
+
+      const stateFinal = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+      assert.equal(
+        stateFinal.claimedAmount.toString(),
+        totalAmount.toString(),
+        "After stream ends, total claimedAmount must equal totalAmount"
+      );
+
+      // ── Step 6: Verify final token balances ──
+      const recipientFinal = BigInt(
+        (
+          await provider.connection.getTokenAccountBalance(
+            stream.recipientTokenAccount
+          )
+        ).value.amount
+      );
+      const vaultFinal = BigInt(
+        (
+          await provider.connection.getTokenAccountBalance(
+            stream.vestingTokenAccount
+          )
+        ).value.amount
+      );
+
+      assert.equal(
+        (recipientFinal - recipientBefore).toString(),
+        totalAmount.toString(),
+        "Recipient net gain must equal totalAmount"
+      );
+      assert.equal(
+        vaultFinal.toString(),
+        "0",
+        "Vault must be fully drained after complete claim"
+      );
+    });
+
+    it("full flow: create cliff stream → wait past cliff → withdraw → verify balance", async () => {
+      const totalAmount = new anchor.BN(500_000);
+      const now = nowSeconds();
+      // Cliff: started 5s ago, cliff 3s from now, ends 25s from now
+      const stream = await createStream({
+        totalAmount,
+        startTime: new anchor.BN(now - 5),
+        endTime: new anchor.BN(now + 25),
+        cliffTime: new anchor.BN(now + 3),
+        vestingType: { cliff: {} },
+        nonce: new anchor.BN(401),
+      });
+
+      // Before cliff: withdrawal must fail
+      await expectError(
+        () => withdraw(stream),
+        "InsufficientUnlockedTokens"
+      );
+
+      // Wait for cliff to pass
+      await sleep(5_000);
+
+      const recipientBefore = BigInt(
+        (
+          await provider.connection.getTokenAccountBalance(
+            stream.recipientTokenAccount
+          )
+        ).value.amount
+      );
+
+      await withdraw(stream);
+
+      const state = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+      const claimed = BigInt(state.claimedAmount.toString());
+      assert.isAbove(Number(claimed), 0, "Should have claimed some tokens after cliff");
+
+      const recipientAfter = BigInt(
+        (
+          await provider.connection.getTokenAccountBalance(
+            stream.recipientTokenAccount
+          )
+        ).value.amount
+      );
+      assert.equal(
+        (recipientAfter - recipientBefore).toString(),
+        claimed.toString(),
+        "Recipient balance delta must equal claimedAmount"
+      );
+    });
+
+    it("full flow: milestone stream → unlock all → withdraw → verify full balance", async () => {
+      const totalAmount = new anchor.BN(600_000);
+      const stream = await createStream({
+        totalAmount,
+        vestingType: { milestone: {} },
+        milestoneCount: 3,
+        nonce: new anchor.BN(402),
+      });
+
+      const recipientBefore = BigInt(
+        (
+          await provider.connection.getTokenAccountBalance(
+            stream.recipientTokenAccount
+          )
+        ).value.amount
+      );
+
+      // Unlock all 3 milestones and withdraw after each
+      for (let i = 0; i < 3; i++) {
+        await program.methods
+          .unlockMilestone()
+          .accountsPartial({
+            vestingState: stream.vestingStatePda,
+            authorityMilestone: wallet.payer.publicKey,
+          })
+          .rpc();
+
+        await withdraw(stream);
+      }
+
+      const stateFinal = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+      assert.equal(
+        stateFinal.claimedAmount.toString(),
+        totalAmount.toString(),
+        "claimedAmount must equal totalAmount after all milestones"
+      );
+
+      const recipientFinal = BigInt(
+        (
+          await provider.connection.getTokenAccountBalance(
+            stream.recipientTokenAccount
+          )
+        ).value.amount
+      );
+      assert.equal(
+        (recipientFinal - recipientBefore).toString(),
+        totalAmount.toString(),
+        "Recipient net gain must equal totalAmount"
+      );
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Edge Cases
+  // Boundary conditions that could silently break the protocol.
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  describe("edge cases", () => {
+    // ── Edge case 1: Zero-amount stream ──
+    // Creating a stream with totalAmount = 0 must be rejected.
+    // This prevents locking zero tokens (wasted rent) and polluting state.
+    it("zero amount stream is rejected with InvalidAmount", async () => {
+      await expectError(
+        () =>
+          createStream({
+            totalAmount: new anchor.BN(0),
+            nonce: new anchor.BN(410),
+          }),
+        "InvalidAmount"
+      );
+    });
+
+    // ── Edge case 2: Withdraw at exactly cliff_time ──
+    // The contract uses `current_time <= cliff_time → return 0`.
+    // At the exact second of cliff_time, nothing should be claimable.
+    // This tests the off-by-one boundary (inclusive zero at cliff boundary).
+    it("withdraw at exactly cliff_time returns InsufficientUnlockedTokens", async () => {
+      const now = nowSeconds();
+      // Set cliffTime to *right now* — the validator block time will be >= now,
+      // meaning current_time <= cliff_time holds at this instant.
+      const stream = await createStream({
+        startTime: new anchor.BN(now - 10),
+        endTime: new anchor.BN(now + 100),
+        cliffTime: new anchor.BN(now), // exactly now
+        vestingType: { cliff: {} },
+        nonce: new anchor.BN(411),
+      });
+
+      // Immediately after creation the block time is at or before cliffTime
+      await expectError(
+        () => withdraw(stream),
+        "InsufficientUnlockedTokens"
+      );
+    });
+
+    // ── Edge case 3: Cancel at exactly end_time ──
+    // A stream whose endTime is in the past (fully vested) cannot be cancelled.
+    // The contract checks `unlocked >= total_amount → StreamFullyVested`.
+    // Setting endTime = nowSeconds() - 1 guarantees the stream has ended.
+    it("cancel at exactly end_time (fully vested stream) returns StreamFullyVested", async () => {
+      const now = nowSeconds();
+      // Stream already ended: endTime is 1 second ago
+      const stream = await createStream({
+        startTime: new anchor.BN(now - 100),
+        endTime: new anchor.BN(now - 1),
+        nonce: new anchor.BN(412),
+      });
+
+      await expectError(
+        () =>
+          program.methods
+            .cancelStream()
+            .accountsPartial({
+              vestingState: stream.vestingStatePda,
+              authorityRevoker: wallet.payer.publicKey,
+              treasuryReturnAddress: funderTokenAccount,
+              vestingTokenAccount: stream.vestingTokenAccount,
+              tokenProgram: TOKEN_PROGRAM_ID,
+            })
+            .rpc(),
+        "StreamFullyVested"
+      );
+    });
+
+    // ── Edge case 4: Double withdraw with nothing remaining ──
+    // After draining a fully-vested stream, a second withdraw must fail.
+    // This verifies the `claimable = unlocked - claimed` underflow protection.
+    it("double withdraw: second call returns InsufficientUnlockedTokens when stream is fully drained", async () => {
+      const totalAmount = new anchor.BN(1_000_000);
+      const now = nowSeconds();
+      // Stream already ended → fully vested immediately
+      const stream = await createStream({
+        totalAmount,
+        startTime: new anchor.BN(now - 50),
+        endTime: new anchor.BN(now - 1),
+        nonce: new anchor.BN(413),
+      });
+
+      // First withdrawal drains all tokens
+      await withdraw(stream);
+
+      const stateAfterFirst = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+      assert.equal(
+        stateAfterFirst.claimedAmount.toString(),
+        totalAmount.toString(),
+        "Stream should be fully claimed after first withdraw"
+      );
+
+      // Second withdrawal — nothing left — must fail
+      await expectError(
+        () => withdraw(stream),
+        "InsufficientUnlockedTokens"
+      );
+    });
+
+    // ── Edge case 5: Withdraw with nothing available (future stream) ──
+    // A stream that hasn't started yet has zero unlocked tokens.
+    // Any withdrawal attempt must be rejected immediately.
+    it("withdraw with nothing available (stream starts in the future) returns InsufficientUnlockedTokens", async () => {
+      const now = nowSeconds();
+      const stream = await createStream({
+        startTime: new anchor.BN(now + 60),
+        endTime: new anchor.BN(now + 120),
+        nonce: new anchor.BN(414),
+      });
+
+      await expectError(
+        () => withdraw(stream),
+        "InsufficientUnlockedTokens"
+      );
+    });
+
+    // ── Edge case 6: Withdraw from revoked stream with zero vested amount ──
+    // If a cliff stream is cancelled before its cliff_time, vested_amount_at_revocation = 0.
+    // The recipient then has nothing to withdraw, so any withdraw attempt must fail.
+    it("withdraw from revoked stream with zero vested returns InsufficientUnlockedTokens", async () => {
+      const now = nowSeconds();
+      // Cliff stream: cliff is 60s away, so nothing is vested yet
+      const stream = await createStream({
+        totalAmount: new anchor.BN(1_000_000),
+        startTime: new anchor.BN(now),
+        endTime: new anchor.BN(now + 120),
+        cliffTime: new anchor.BN(now + 60),
+        vestingType: { cliff: {} },
+        nonce: new anchor.BN(415),
+      });
+
+      // Cancel before cliff — vested_amount_at_revocation should be 0
+      await program.methods
+        .cancelStream()
+        .accountsPartial({
+          vestingState: stream.vestingStatePda,
+          authorityRevoker: wallet.payer.publicKey,
+          treasuryReturnAddress: funderTokenAccount,
+          vestingTokenAccount: stream.vestingTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+
+      const cancelledState = await program.account.vestingState.fetch(
+        stream.vestingStatePda
+      );
+      assert.isTrue(cancelledState.isRevoked);
+      assert.equal(
+        cancelledState.vestedAmountAtRevocation.toString(),
+        "0",
+        "No tokens should be vested before the cliff"
+      );
+
+      // Recipient has nothing to withdraw
+      await expectError(
+        () => withdraw(stream),
+        "InsufficientUnlockedTokens"
+      );
+    });
+
+    // ── Edge case 7: Stream with start_time == end_time is rejected ──
+    // Zero-duration streams are meaningless and must be rejected.
+    it("stream with start_time == end_time is rejected with InvalidTimeRange", async () => {
+      const now = nowSeconds();
+      await expectError(
+        () =>
+          createStream({
+            startTime: new anchor.BN(now + 10),
+            endTime: new anchor.BN(now + 10), // equal → invalid
+            nonce: new anchor.BN(416),
+          }),
+        "InvalidTimeRange"
+      );
+    });
+
+    // ── Edge case 8: Milestone stream with milestone_count == 0 is rejected ──
+    // A milestone stream must have at least one milestone.
+    it("milestone stream with milestone_count == 0 is rejected with MilestoneCountZero", async () => {
+      await expectError(
+        () =>
+          createStream({
+            vestingType: { milestone: {} },
+            milestoneCount: 0,
+            nonce: new anchor.BN(417),
+          }),
+        "MilestoneCountZero"
+      );
+    });
+  });
 });
