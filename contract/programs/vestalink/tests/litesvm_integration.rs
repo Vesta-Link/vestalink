@@ -233,8 +233,8 @@ struct Ctx {
     funder_ata: Pubkey,
 }
 
-fn setup() -> Ctx {
-    let mut svm = load_svm().expect("anchor build has not been run");
+fn setup() -> Option<Ctx> {
+    let mut svm = load_svm()?;
     let funder = Keypair::new();
     svm.airdrop(&funder.pubkey(), 100 * LAMPORTS_PER_SOL).unwrap();
 
@@ -242,7 +242,7 @@ fn setup() -> Ctx {
     let funder_ata = create_token_account(&mut svm, &funder, mint, funder.pubkey());
     mint_to(&mut svm, &funder, mint, funder_ata, 10_000_000_000);
 
-    Ctx { svm, funder, mint, funder_ata }
+    Some(Ctx { svm, funder, mint, funder_ata })
 }
 
 // ─── tests ───────────────────────────────────────────────────────────────────
@@ -250,16 +250,8 @@ fn setup() -> Ctx {
 /// Happy path: create_stream locks tokens in the vault and initialises state.
 #[test]
 fn test_create_stream_locks_tokens() {
-    let mut ctx = match load_svm() {
-        Some(svm) => {
-            let funder = Keypair::new();
-            let mut svm = svm;
-            svm.airdrop(&funder.pubkey(), 100 * LAMPORTS_PER_SOL).unwrap();
-            let mint = create_mint(&mut svm, &funder);
-            let funder_ata = create_token_account(&mut svm, &funder, mint, funder.pubkey());
-            mint_to(&mut svm, &funder, mint, funder_ata, 10_000_000_000);
-            Ctx { svm, funder, mint, funder_ata }
-        }
+    let mut ctx = match setup() {
+        Some(ctx) => ctx,
         None => return, // anchor build not run, skip gracefully
     };
 
@@ -307,16 +299,8 @@ fn test_create_stream_locks_tokens() {
 /// recipient can claim exactly half the total.
 #[test]
 fn test_withdraw_after_time_warp_claims_half() {
-    let mut ctx = match load_svm() {
-        Some(svm) => {
-            let funder = Keypair::new();
-            let mut svm = svm;
-            svm.airdrop(&funder.pubkey(), 100 * LAMPORTS_PER_SOL).unwrap();
-            let mint = create_mint(&mut svm, &funder);
-            let funder_ata = create_token_account(&mut svm, &funder, mint, funder.pubkey());
-            mint_to(&mut svm, &funder, mint, funder_ata, 10_000_000_000);
-            Ctx { svm, funder, mint, funder_ata }
-        }
+    let mut ctx = match setup() {
+        Some(ctx) => ctx,
         None => return,
     };
 
@@ -373,16 +357,8 @@ fn test_withdraw_after_time_warp_claims_half() {
 /// not the recipient of.
 #[test]
 fn test_unauthorized_withdraw_is_rejected() {
-    let mut ctx = match load_svm() {
-        Some(svm) => {
-            let funder = Keypair::new();
-            let mut svm = svm;
-            svm.airdrop(&funder.pubkey(), 100 * LAMPORTS_PER_SOL).unwrap();
-            let mint = create_mint(&mut svm, &funder);
-            let funder_ata = create_token_account(&mut svm, &funder, mint, funder.pubkey());
-            mint_to(&mut svm, &funder, mint, funder_ata, 10_000_000_000);
-            Ctx { svm, funder, mint, funder_ata }
-        }
+    let mut ctx = match setup() {
+        Some(ctx) => ctx,
         None => return,
     };
 
