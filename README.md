@@ -14,15 +14,13 @@ vestalink/
 │   │       └── src/
 │   │           └── lib.rs
 │   ├── tests/
-│   │   └── vestalink.ts
 │   ├── migrations/
 │   ├── target/
 │   ├── Anchor.toml
 │   ├── Cargo.toml
 │   ├── package.json
 │   └── ...
-├── frontend/            # Next.js app (coming soon)
-├── raw_docs/            # Research and architecture documents
+├── frontend/            # Next.js app
 ├── .github/
 │   └── workflows/
 │       └── ci.yml
@@ -37,7 +35,7 @@ vestalink/
 | Solana CLI | 1.18.x        | `sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"`                                               |
 | Anchor CLI | 0.32.1        | `cargo install --git https://github.com/coral-xyz/anchor avm --force && avm install 0.32.1 && avm use 0.32.1` |
 | Node.js    | 20.x          | [nodejs.org](https://nodejs.org/) or via `nvm`                                                                |
-| Yarn       | 1.x (Classic) | `npm install -g yarn`                                                                                         |
+| Yarn / npm | 1.x / 10.x    | `npm install -g yarn` (contract uses Yarn, frontend uses npm)                                                 |
 
 > **Note:** This project uses Anchor 0.32.1 (both the Rust crate and the TypeScript client). Solana CLI 1.18.x is recommended; Solana CLI 2.x is also compatible.
 
@@ -50,11 +48,20 @@ git clone <repo-url> vestalink
 cd vestalink
 ```
 
-### 2. Install contract dependencies
+### 2. Install dependencies
+
+**Contract:**
 
 ```bash
 cd contract
 yarn install
+```
+
+**Frontend:**
+
+```bash
+cd ../frontend
+npm install
 ```
 
 ### 3. Configure Solana CLI for local development
@@ -145,6 +152,19 @@ To skip the validator and run tests against a running local validator:
 anchor test --skip-local-validator
 ```
 
+## Frontend
+
+The Next.js application is located in the `frontend/` directory.
+
+### Running locally
+
+```bash
+cd frontend
+npm run dev
+```
+
+The app will be available at [http://localhost:3000](http://localhost:3000).
+
 ## Program Overview
 
 VestaLink defines the following core instructions (with aliases for convenience):
@@ -154,7 +174,9 @@ VestaLink defines the following core instructions (with aliases for convenience)
 | `create_vesting_schedule` | `create_stream`                          | Create a new vesting schedule for a recipient            |
 | `unlock_milestone`        |                                          | Unlock a milestone in a milestone-based vesting schedule |
 | `claim`                   | `withdraw`, `claim_tokens`               | Claim vested tokens                                      |
-| `cancel_vesting`          | `revoke_vesting`, `cancel_stream`        | Revoke a vesting schedule and return unvested tokens     |
+| `revoke_vesting`          | `cancel_vesting`                         | Revoke a vesting schedule and return unvested tokens     |
+| `cancel_stream`           |                                          | Cancel an active stream (fails if fully vested/revoked)  |
+| `request_vesta`           |                                          | Request test tokens from the VESTA faucet                |
 
 ### VestingState Account
 
