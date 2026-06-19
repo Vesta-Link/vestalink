@@ -165,22 +165,272 @@ npm run dev
 
 The app will be available at [http://localhost:3000](http://localhost:3000).
 
-## Program Overview
+## Instruction Reference
 
-VestaLink defines the following core instructions (with aliases for convenience):
+VestaLink defines the following core instructions. Many instructions have aliases for developer convenience.
 
-| Instruction               | Aliases                                  | Description                                              |
-| ------------------------- | ---------------------------------------- | -------------------------------------------------------- |
-| `create_vesting_schedule` | `create_stream`                          | Create a new vesting schedule for a recipient            |
-| `unlock_milestone`        |                                          | Unlock a milestone in a milestone-based vesting schedule |
-| `claim`                   | `withdraw`, `claim_tokens`               | Claim vested tokens                                      |
-| `revoke_vesting`          | `cancel_vesting`                         | Revoke a vesting schedule and return unvested tokens     |
-| `cancel_stream`           |                                          | Cancel an active stream (fails if fully vested/revoked)  |
-| `request_vesta`           |                                          | Request test tokens from the VESTA faucet                |
+### 1. `create_stream` (Alias: `create_vesting_schedule`)
+Creates a new vesting schedule and locks tokens in a program-derived vault.
+
+- **Parameters (`CreateVestingParams`)**:
+  - `total_amount` (`u64`): Total token amount to vest.
+  - `vesting_type` (`VestingType`): `Linear`, `Cliff`, or `Milestone`.
+  - `start_time` (`i64`): Unix timestamp when vesting begins.
+  - `end_time` (`i64`): Unix timestamp when vesting ends.
+  - `cliff_time` (`i64`): Unix timestamp for the cliff (if applicable).
+  - `milestone_count` (`u8`): Total number of milestones (if applicable).
+  - `nonce` (`u64`): Unique ID to allow multiple streams between the same funder and recipient.
+- **Expected Behavior**: Initializes a `VestingState` PDA. Transfers `total_amount` of tokens from the funder's token account to the vesting PDA's token vault.
+- **Error Codes**: `InvalidAmount`, `InvalidTimeRange`, `CliffTimeExceedsEndTime`, `MilestoneCountZero`, `InvalidVaultOwner`, `InvalidTokenMint`, `InvalidTokenOwner`.
+- **Example Usage**:
+  ```typescript
+  await program.methods.createStream({
+    totalAmount: new anchor.BN(1000000),
+    vestingType: { linear: {} },
+    startTime: new anchor.BN(Math.floor(Date.now() / 1000)),
+    endTime: new anchor.BN(Math.floor(Date.now() / 1000) + 86400),
+    cliffTime: new anchor.BN(Math.floor(Date.now() / 1000)),
+    milestoneCount: 0,
+    nonce: new anchor.BN(1),
+  })
+  .accountsPartial({
+    vestingState: vestingStatePda,
+    funder: funderPublicKey,
+    recipient: recipientPublicKey,
+    funderTokenAccount: funderTokenAccountAddress,
+    vestingTokenAccount: vaultTokenAccountAddress,
+    tokenProgram: TOKEN_PROGRAM_ID,
+    systemProgram: anchor.web3.SystemProgram.programId,
+  })
+  .rpc();
+  ```
+
+### 2. `unlock_milestone`
+Unlocks the next milestone for a milestone-based vesting schedule.
+
+- **Parameters**: None.
+- **Expected Behavior**: Increments `milestones_reached` by 1. Only callable by the `authority_milestone`.
+- **Error Codes**: `UnsupportedVestingType`, `AllMilestonesReached`, `StreamCancelled`.
+- **Example Usage**:
+  ```typescript
+  await program.methods.unlockMilestone()
+    .accountsPartial({
+      vestingState: vestingStatePda,
+      authorityMilestone: funderPublicKey,
+    })
+    .rpc();
+  ```
+
+### 3. `claim` (Aliases: `withdraw`, `claim_tokens`)
+Allows the recipient to claim their currently unlocked tokens.
+
+- **Parameters**: None.
+- **Expected Behavior**: Calculates the currently unlocked tokens, subtracts already claimed tokens, and transfers the difference from the vault to the recipient's token account. Updates `claimed_amount`.
+- **Error Codes**: `UnauthorizedClaimant`, `InvalidTokenOwner`, `InvalidTokenMint`, `InvalidVaultOwner`, `InsufficientUnlockedTokens`, `ArithmeticOverflow`.
+- **Example Usage**:
+  ```typescript
+  await program.methods.claim()
+    .accountsPartial({
+      vestingState: vestingStatePda,
+      recipient: recipientPublicKey,
+      recipientTokenAccount: recipientTokenAccountAddress,
+      vestingTokenAccount: vaultTokenAccountAddress,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .signers([recipientKeypair])
+    .rpc();
+  ```
+
+### 4. `revoke_vesting` (Alias: `cancel_vesting`)
+Revokes an active vesting schedule.
+
+- **Parameters**: None.
+- **Expected Behavior**: Marks the stream as revoked (`is_revoked = true`) and transfers any unvested tokens from the vault to the `treasury_return_address`. Unlocked tokens remain in the vault for the recipient to claim later.
+- **Error Codes**: `InvalidTreasuryReturnAddress`, `InvalidTokenMint`, `InvalidVaultOwner`, `StreamRevoked`, `ArithmeticOverflow`.
+- **Example Usage**:
+  ```typescript
+  await program.methods.revokeVesting()
+    .accountsPartial({
+      vestingState: vestingStatePda,
+      authorityRevoker: funderPublicKey,
+      treasuryReturnAddress: funderTokenAccountAddress,
+      vestingTokenAccount: vaultTokenAccountAddress,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .rpc();
+  ```
+
+### 5. `cancel_stream`
+A stricter version of revoking a stream.
+
+- **Parameters**: None.
+- **Expected Behavior**: Functions identical to `revoke_vesting` but explicitly fails if the stream has already been cancelled or is already fully vested.
+- **Error Codes**: `StreamCancelled`, `StreamFullyVested` (plus all errors from `revoke_vesting`).
+- **Example Usage**:
+  ```typescript
+  await program.methods.cancelStream()
+    .accountsPartial({
+      vestingState: vestingStatePda,
+      authorityRevoker: funderPublicKey,
+      treasuryReturnAddress: funderTokenAccountAddress,
+      vestingTokenAccount: vaultTokenAccountAddress,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .rpc();
+  ```
+
+### 6. `request_vesta`
+Requests test tokens from the VESTA faucet (localnet/devnet only).
+
+- **Parameters**: None.
+- **Expected Behavior**: Mints 10,000 VESTA tokens to the requester's token account.
+- **Error Codes**: `InvalidTokenOwner`, `InvalidTokenMint`.
+- **Example Usage**:
+  ```typescript
+  await program.methods.requestVesta()
+    .accountsPartial({
+      requester: requesterPublicKey,
+      vestaMint: vestaMintAddress,
+      requesterTokenAccount: requesterTokenAccountAddress,
+      faucetAuthority: faucetPda,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .rpc();
+  ```
+
+## Integration Guide
+
+To create a stream using the VestaLink program in your own project, follow these steps.
+
+### Step 1: Install Dependencies
+
+Ensure you have `@coral-xyz/anchor` and `@solana/spl-token` installed.
+
+```bash
+npm install @coral-xyz/anchor @solana/spl-token
+```
+
+### Step 2: Set Up Provider and Program
+
+```typescript
+import * as anchor from "@coral-xyz/anchor";
+import { Program } from "@coral-xyz/anchor";
+import { Vestalink } from "./target/types/vestalink"; // Path to your generated types
+
+const provider = anchor.AnchorProvider.env();
+anchor.setProvider(provider);
+
+// Initialize the program using the IDL and provider
+const program = anchor.workspace.vestalink as Program<Vestalink>;
+```
+
+### Step 3: Derive PDAs and Token Accounts
+
+You need to derive the PDA for the `VestingState` and prepare the associated token accounts.
+
+```typescript
+import { getAssociatedTokenAddressSync } from "@solana/spl-token";
+
+const funderPublicKey = provider.wallet.publicKey;
+const recipientPublicKey = new anchor.web3.PublicKey("..."); // The recipient's wallet
+const tokenMint = new anchor.web3.PublicKey("..."); // The token being vested
+const nonce = new anchor.BN(Date.now()); // Unique identifier for this stream
+
+// Derive the VestingState PDA
+const [vestingStatePda] = anchor.web3.PublicKey.findProgramAddressSync(
+  [
+    Buffer.from("vesting"),
+    funderPublicKey.toBuffer(),
+    recipientPublicKey.toBuffer(),
+    nonce.toArrayLike(Buffer, "le", 8),
+  ],
+  program.programId
+);
+
+// Determine the vault token account (owned by the PDA)
+const vaultTokenAccount = getAssociatedTokenAddressSync(
+  tokenMint,
+  vestingStatePda,
+  true // allowOwnerOffCurve = true for PDAs
+);
+
+// Determine the recipient's token account
+const recipientTokenAccount = getAssociatedTokenAddressSync(
+  tokenMint,
+  recipientPublicKey
+);
+
+// Determine the funder's token account
+const funderTokenAccount = getAssociatedTokenAddressSync(
+  tokenMint,
+  funderPublicKey
+);
+```
+
+### Step 4: Create the Stream
+
+Execute the `createStream` instruction. Ensure that the associated token accounts are created (e.g., via `createAssociatedTokenAccountIdempotentInstruction`) if they don't already exist.
+
+```typescript
+import { 
+  createAssociatedTokenAccountIdempotentInstruction, 
+  TOKEN_PROGRAM_ID, 
+  ASSOCIATED_TOKEN_PROGRAM_ID 
+} from "@solana/spl-token";
+
+// Define the vesting schedule
+const totalAmount = new anchor.BN(1_000_000); // 1 Token (assuming 6 decimals)
+const startTime = new anchor.BN(Math.floor(Date.now() / 1000));
+const endTime = new anchor.BN(startTime.toNumber() + (30 * 24 * 60 * 60)); // 30 days
+
+// Prepare pre-instructions to create token accounts if needed
+const preInstructions = [
+  createAssociatedTokenAccountIdempotentInstruction(
+    funderPublicKey, // Payer
+    vaultTokenAccount, // ATA
+    vestingStatePda, // Owner
+    tokenMint,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID
+  ),
+  createAssociatedTokenAccountIdempotentInstruction(
+    funderPublicKey, // Payer
+    recipientTokenAccount, // ATA
+    recipientPublicKey, // Owner
+    tokenMint,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID
+  )
+];
+
+// Execute the transaction
+const txHash = await program.methods.createStream({
+  totalAmount,
+  vestingType: { linear: {} }, // or { cliff: {} }, { milestone: {} }
+  startTime,
+  endTime,
+  cliffTime: startTime, // Only relevant for Cliff vesting
+  milestoneCount: 0, // Only relevant for Milestone vesting
+  nonce,
+})
+.accountsPartial({
+  vestingState: vestingStatePda,
+  funder: funderPublicKey,
+  recipient: recipientPublicKey,
+  funderTokenAccount: funderTokenAccount,
+  vestingTokenAccount: vaultTokenAccount,
+  tokenProgram: TOKEN_PROGRAM_ID,
+  systemProgram: anchor.web3.SystemProgram.programId,
+})
+.preInstructions(preInstructions)
+.rpc();
+
+console.log("Stream created successfully! Tx Hash:", txHash);
+```
 
 ### VestingState Account
 
-Each vesting schedule is stored in a PDA account seeded by `["vesting", funder, recipient]` with the following fields:
+Each vesting schedule is stored in a PDA account seeded by `["vesting", funder, recipient, nonce]` with the following fields:
 
 | Field                     | Type        | Description                                              |
 | ------------------------- | ----------- | -------------------------------------------------------- |
