@@ -225,7 +225,7 @@ textarea:focus-visible {
   cursor: pointer;
   font-size: 14px;
   font-weight: 520;
-  transition: transform 160ms ease, background 160ms ease, color 160ms ease, opacity 160ms ease;
+  transition: transform 160ms ease, background 160ms ease, color 160ms ease, opacity 160ms ease, box-shadow 160ms ease;
 }
 
 .button:disabled,
@@ -237,6 +237,11 @@ textarea:focus-visible {
 .button:not(:disabled):hover,
 .icon-button:not(:disabled):hover {
   transform: translateY(-1px);
+}
+
+.button:not(:disabled):active,
+.icon-button:not(:disabled):active {
+  transform: scale(0.97);
 }
 
 .primary {
@@ -404,6 +409,7 @@ textarea::placeholder {
   padding: 11px 12px;
   font-size: 13px;
   line-height: 1.45;
+  animation: slide-in-down 0.3s ease-out;
 }
 
 .message.error {
@@ -430,6 +436,7 @@ textarea::placeholder {
   padding: 14px;
   background: var(--background);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
+  animation: slide-in-right 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .toast.success {
@@ -540,7 +547,20 @@ textarea::placeholder {
   border-radius: var(--radius);
   padding: 18px;
   background: var(--background);
+  animation: fade-in-up 0.4s ease-out both;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
+
+.stream-card:hover {
+  border-color: var(--foreground);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.stream-list .stream-card:nth-child(1) { animation-delay: 0s; }
+.stream-list .stream-card:nth-child(2) { animation-delay: 0.06s; }
+.stream-list .stream-card:nth-child(3) { animation-delay: 0.12s; }
+.stream-list .stream-card:nth-child(4) { animation-delay: 0.18s; }
+.stream-list .stream-card:nth-child(5) { animation-delay: 0.24s; }
 
 .stream-card-top,
 .stream-footer,
@@ -633,6 +653,7 @@ textarea::placeholder {
   border-radius: var(--radius);
   padding: 24px;
   text-align: center;
+  animation: fade-in 0.5s ease-out;
 }
 
 .empty-state p {
@@ -736,6 +757,7 @@ textarea::placeholder {
   height: 100%;
   max-height: none;
   color: inherit;
+  animation: fade-in 0.2s ease-out;
 }
 
 .modal-box {
@@ -745,6 +767,7 @@ textarea::placeholder {
   background: var(--background);
   padding: 28px;
   box-shadow: 0 24px 64px rgba(0,0,0,0.14);
+  animation: modal-enter 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .modal-box h2 {
@@ -779,6 +802,79 @@ textarea::placeholder {
   to {
     background-position: -200% 0;
   }
+}
+
+/* ── Component animations ── */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes fade-in-left {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes slide-in-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes modal-enter {
+  from { transform: scale(0.95) translateY(8px); }
+  to   { transform: none; }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: none; }
+  50%      { box-shadow: 0 0 8px rgba(0, 0, 0, 0.12); }
+}
+
+/* ── Hero stagger ── */
+.hero-section .eyebrow {
+  animation: fade-in-up 0.5s ease-out both;
+  animation-delay: 0.05s;
+}
+
+.hero-section h1 {
+  animation: fade-in-up 0.5s ease-out both;
+  animation-delay: 0.15s;
+}
+
+.hero-section > p {
+  animation: fade-in-up 0.5s ease-out both;
+  animation-delay: 0.25s;
+}
+
+.hero-section .action-row {
+  animation: fade-in-up 0.5s ease-out both;
+  animation-delay: 0.35s;
+}
+
+/* ── Section headers ── */
+.section-header {
+  animation: fade-in-up 0.5s ease-out both;
+}
+
+/* ── Active progress glow ── */
+.stream-card .progress-track {
+  transition: box-shadow 0.3s ease;
+}
+
+/* ── Refresh spin ── */
+.icon-button:active svg {
+  transition: transform 0.4s ease;
+  transform: rotate(180deg);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -900,7 +996,19 @@ textarea::placeholder {
   background: var(--surface);
   border-radius: var(--radius);
   border: 1px solid var(--border);
+  animation: fade-in-up 0.45s ease-out both;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
+
+.step-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
+}
+
+.steps-grid .step-card:nth-child(1) { animation-delay: 0.05s; }
+.steps-grid .step-card:nth-child(2) { animation-delay: 0.12s; }
+.steps-grid .step-card:nth-child(3) { animation-delay: 0.19s; }
+.steps-grid .step-card:nth-child(4) { animation-delay: 0.26s; }
 
 .step-icon {
   margin-bottom: 16px;
@@ -929,7 +1037,13 @@ textarea::placeholder {
 .use-case-card {
   background: var(--background);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  animation: fade-in-up 0.45s ease-out both;
 }
+
+.use-case-grid .use-case-card:nth-child(1) { animation-delay: 0.05s; }
+.use-case-grid .use-case-card:nth-child(2) { animation-delay: 0.12s; }
+.use-case-grid .use-case-card:nth-child(3) { animation-delay: 0.19s; }
+.use-case-grid .use-case-card:nth-child(4) { animation-delay: 0.26s; }
 
 .use-case-card:hover {
   transform: translateY(-4px);
@@ -964,7 +1078,12 @@ textarea::placeholder {
   gap: 20px;
   position: relative;
   padding-bottom: 32px;
+  animation: fade-in-left 0.4s ease-out both;
 }
+
+.timeline-item:nth-child(1) { animation-delay: 0.1s; }
+.timeline-item:nth-child(2) { animation-delay: 0.22s; }
+.timeline-item:nth-child(3) { animation-delay: 0.34s; }
 
 .timeline-item:last-child {
   padding-bottom: 0;
