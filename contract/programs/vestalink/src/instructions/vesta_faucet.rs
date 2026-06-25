@@ -26,7 +26,6 @@ pub struct RequestVesta<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn request_vesta_impl(ctx: Context<RequestVesta>) -> Result<()> {
     let bump = [ctx.bumps.faucet_authority];
     let seeds = &[b"vesta_faucet".as_ref(), &bump];

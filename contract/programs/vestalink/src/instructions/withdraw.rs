@@ -29,7 +29,6 @@ pub struct Withdraw<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn withdraw_impl(ctx: Context<Withdraw>) -> Result<()> {
     let vesting_state = &ctx.accounts.vesting_state;
     let unlocked_amount = vesting_state.current_unlocked_amount()?;

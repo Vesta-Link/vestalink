@@ -31,7 +31,6 @@ pub struct RevokeVesting<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn revoke_vesting_impl(ctx: Context<RevokeVesting>) -> Result<()> {
     let vesting_state = &ctx.accounts.vesting_state;
     require!(!vesting_state.is_revoked, VestingError::StreamRevoked);
@@ -84,7 +83,6 @@ pub fn revoke_vesting_impl(ctx: Context<RevokeVesting>) -> Result<()> {
     Ok(())
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 pub fn cancel_stream_impl(ctx: Context<RevokeVesting>) -> Result<()> {
     let vesting_state = &ctx.accounts.vesting_state;
 

@@ -1,5 +1,3 @@
-#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
-
 use anchor_lang::prelude::*;
 
 pub mod error;
@@ -15,7 +13,6 @@ pub use utils::*;
 declare_id!("8q5LLVTGNUS16AV4xj6KPLet1M7y4xpa8XjxV7cHH98r");
 
 #[program]
-#[cfg_attr(coverage_nightly, coverage(off))]
 pub mod vestalink {
     use super::*;
 
