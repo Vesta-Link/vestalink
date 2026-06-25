@@ -5,7 +5,6 @@ import {
   explorerUrl,
   formatDateTime,
   rawToDecimal,
-  shorten,
   type StreamView
 } from "@/lib/vesting";
 
@@ -39,7 +38,8 @@ export function StreamCard({
   const counterparty = mode === "admin" ? account.recipient : account.funder;
   const claimed = rawToDecimal(account.claimedAmount, stream.decimals);
   const total = rawToDecimal(account.totalAmount, stream.decimals);
-  const claimable = rawToDecimal(stream.claimableRaw, stream.decimals);
+  const claimableRaw = stream.claimableRaw;
+  const claimable = rawToDecimal(claimableRaw, stream.decimals);
 
   const canCancel =
     onCancel &&
@@ -47,8 +47,11 @@ export function StreamCard({
     stream.status !== "complete" &&
     stream.status !== "revoked";
 
+  const percent = Math.min(stream.progress, 100);
+  const hasClaimable = claimableRaw > 0n;
+
   return (
-    <article className="stream-card">
+    <article className="stream-card" style={hasClaimable && mode === "recipient" ? { borderColor: 'var(--accent)', boxShadow: '0 0 10px rgba(16, 185, 129, 0.1)' } : {}}>
       <div className="stream-card-top">
         <div>
           <p className="label">{mode === "admin" ? "Recipient" : "Funder"}</p>
@@ -58,15 +61,41 @@ export function StreamCard({
             target="_blank"
             rel="noreferrer"
           >
-            {shorten(counterparty)}
+            {counterparty.toBase58()}
             <ExternalLink size={14} aria-hidden="true" />
           </a>
         </div>
         <StatusPill status={stream.status} />
       </div>
 
-      <div className="progress-track" aria-label={`${stream.progress.toFixed(2)}% unlocked`}>
-        <span style={{ width: `${Math.min(stream.progress, 100)}%` }} />
+      {/* Progress Visualization */}
+      <div className="progress-section" style={{ margin: '16px 0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 13 }}>
+          <span style={{ color: 'var(--muted)' }}>Progress</span>
+          <span style={{ fontWeight: 600 }}>{percent.toFixed(2)}%</span>
+        </div>
+        <div className="progress-track" aria-label={`${percent.toFixed(2)}% unlocked`} style={{ height: 8, background: 'var(--surface-hover)', borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
+          <span
+            style={{
+              display: 'block',
+              height: '100%',
+              width: `${percent}%`,
+              background: 'linear-gradient(90deg, var(--foreground), var(--accent))',
+              borderRadius: 4,
+              transition: 'width 1s linear',
+              position: 'relative'
+            }}
+          >
+            {stream.status === "active" && (
+              <span className="shimmer-effect" style={{
+                position: 'absolute',
+                top: 0, left: 0, right: 0, bottom: 0,
+                background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)',
+                animation: 'shimmer-slide 2s infinite linear'
+              }} />
+            )}
+          </span>
+        </div>
       </div>
 
       <div className="metric-grid">
@@ -84,7 +113,7 @@ export function StreamCard({
         </div>
         <div>
           <span className="label">Claimable</span>
-          <strong>{claimable}</strong>
+          <strong style={hasClaimable ? { color: 'var(--accent)' } : {}}>{claimable}</strong>
         </div>
         <div>
           <span className="label">Remaining</span>
