@@ -3,7 +3,6 @@
 import { PrivyProvider, useLogin, usePrivy } from "@privy-io/react-auth";
 import {
   toSolanaWalletConnectors,
-  useSignAndSendTransaction,
   useWallets
 } from "@privy-io/react-auth/solana";
 import { UserPill } from "@privy-io/react-auth/ui";
@@ -17,7 +16,7 @@ const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "";
 const rpcSubscriptionsUrl = RPC_URL.replace(/^http/, "ws");
 export const PRIVY_CONFIGURED = Boolean(privyAppId);
 
-export function PrivySolanaProvider({ children }: { children: ReactNode }) {
+export function PrivySolanaProvider({ children }: Readonly<{ children: ReactNode }>) {
   if (!PRIVY_CONFIGURED) {
     return <>{children}</>;
   }
@@ -112,4 +111,4 @@ export function useActiveSolanaWallet() {
   };
 }
 
-export { useSignAndSendTransaction };
+export { useSignAndSendTransaction } from "@privy-io/react-auth/solana";

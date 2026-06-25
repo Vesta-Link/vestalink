@@ -104,18 +104,50 @@ export function getProgram(provider: anchor.AnchorProvider) {
   return new anchor.Program(VESTALINK_IDL, provider);
 }
 
-export function parseCsvRows(value: string) {
-  return value
+export type RecipientInputRow = {
+  wallet: string;
+  amount: string;
+  status: "valid" | "invalid";
+  error?: string;
+  originalRow: number;
+};
+
+export function parseCsvRows(value: string): RecipientInputRow[] {
+  const rows = value
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [wallet, amount] = line.split(",").map((part) => part.trim());
-      if (!wallet || !amount) {
-        throw new Error(`Invalid row: "${line}". Use wallet,amount.`);
-      }
-      return { wallet, amount };
-    });
+    .filter(Boolean);
+
+  const seenWallets = new Set<string>();
+
+  return rows.map((line, index) => {
+    // Basic comma split
+    const parts = line.split(",").map((part) => part.trim());
+    const wallet = parts[0] || "";
+    const amount = parts[1] || "";
+    
+    if (!wallet || !amount) {
+      return { wallet, amount, status: "invalid", error: "Missing wallet or amount", originalRow: index + 1 };
+    }
+
+    try {
+      new PublicKey(wallet);
+    } catch {
+      return { wallet, amount, status: "invalid", error: "Invalid Solana address", originalRow: index + 1 };
+    }
+
+    const numAmount = Number(amount.replaceAll(",", ""));
+    if (Number.isNaN(numAmount) || numAmount <= 0) {
+      return { wallet, amount, status: "invalid", error: "Invalid amount", originalRow: index + 1 };
+    }
+
+    if (seenWallets.has(wallet)) {
+      return { wallet, amount, status: "invalid", error: "Duplicate wallet", originalRow: index + 1 };
+    }
+    seenWallets.add(wallet);
+
+    return { wallet, amount, status: "valid", originalRow: index + 1 };
+  });
 }
 
 export function decimalToRaw(amount: string, decimals: number) {
@@ -412,6 +444,46 @@ export async function fetchStreams(connection: Connection) {
   );
 }
 
+export async function fetchStream(connection: Connection, id: string): Promise<StreamView | null> {
+  try {
+    const provider = getProvider(connection, {
+      publicKey: PublicKey.default
+    });
+    const program = getProgram(provider);
+    const publicKey = new PublicKey(id);
+    const account = (await (program.account as any).vestingState.fetch(publicKey)) as VestalinkAccount;
+
+    const now = Math.floor(Date.now() / 1000);
+    const total = BigInt(account.totalAmount.toString());
+    const claimed = BigInt(account.claimedAmount.toString());
+    const start = account.startTime.toNumber();
+    const end = account.endTime.toNumber();
+    const unlockedRaw = calculateUnlocked(total, start, end, now, account);
+    const claimableRaw = unlockedRaw > claimed ? unlockedRaw - claimed : 0n;
+    const lockedRaw = total > unlockedRaw ? total - unlockedRaw : 0n;
+    const progress = total === 0n ? 0 : Number((unlockedRaw * 10_000n) / total) / 100;
+    const token = await resolveVault(connection, publicKey);
+
+    return {
+      publicKey,
+      account,
+      vault: token?.vault,
+      mint: token?.mint,
+      decimals: token?.decimals ?? 0,
+      symbol: token?.symbol ?? "tokens",
+      unlockedRaw,
+      claimableRaw,
+      lockedRaw,
+      progress,
+      status: getStatus(now, start, end, account)
+    } satisfies StreamView;
+  } catch (err) {
+    console.error("Failed to fetch stream:", err);
+    return null;
+  }
+}
+
+
 function calculateUnlocked(
   total: bigint,
   start: number,
@@ -456,12 +528,12 @@ export function serializeTransactionError(error: unknown) {
   const rawMessage = error instanceof Error ? error.message : stringifiedError;
   const message = rawMessage.toLowerCase();
 
-  if (/reject|cancel|declined|denied/.test(message)) {
-    return "Transaction was rejected in your wallet.";
+  if (/reject|cancel|declined|denied|user rejected/.test(message)) {
+    return "Wallet signature rejected. Please approve the transaction to continue.";
   }
 
-  if (/insufficient|0x1|attempt to debit|no prior credit|funds/.test(message)) {
-    return "Your wallet does not have enough devnet SOL to pay transaction fees. Please request devnet SOL and try again.";
+  if (/insufficient|0x1|attempt to debit|no prior credit|funds|balance/.test(message)) {
+    return "Insufficient token or SOL balance for this stream. Please check your wallet.";
   }
 
   if (/method not found|unknown instruction|instruction fallback|requestvesta|request_vesta/.test(message)) {
@@ -469,11 +541,15 @@ export function serializeTransactionError(error: unknown) {
   }
 
   if (/blockhash|timeout|network|fetch|rpc|503|504|429/.test(message)) {
-    return "Devnet RPC is not responding. Please wait a moment and try again.";
+    return "RPC timeout. Transaction may still be processing. Check explorer or retry.";
   }
 
-  if (/mint|token account|owner does not match|invalid account data/.test(message)) {
-    return "VESTA token setup is not valid. Please contact the team.";
+  if (/mint|token account|owner does not match|invalid account data|account not found/.test(message)) {
+    return "Unable to find token account for this wallet. Recipient may need to initialize it.";
+  }
+  
+  if (/public key|invalid recipient/.test(message)) {
+    return "Invalid recipient wallet address.";
   }
 
   if (/internal error|unexpected error/.test(message)) {
