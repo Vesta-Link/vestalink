@@ -17,8 +17,13 @@ export const VESTALINK_IDL = {
         { name: "funder", writable: true, signer: true },
         { name: "recipient" },
         { name: "funder_token_account", writable: true },
+        { name: "mint" },
         { name: "vesting_token_account", writable: true },
+        { name: "global_config", pda: { seeds: [{ kind: "const", value: [103, 108, 111, 98, 97, 108, 95, 99, 111, 110, 102, 105, 103] }] } },
+        { name: "admin_address" },
+        { name: "admin_token_account", writable: true },
         { name: "token_program", address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" },
+        { name: "associated_token_program", address: "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" },
         { name: "system_program", address: "11111111111111111111111111111111" }
       ],
       args: [{ name: "params", type: { defined: { name: "CreateVestingParams" } } }]

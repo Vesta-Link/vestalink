@@ -231,6 +231,17 @@ export async function buildCreateStreamTransaction(params: {
     throw new Error("Start time must be before end time.");
   }
 
+  const adminAddressStr = process.env.NEXT_PUBLIC_ADMIN_ADDRESS;
+  if (!adminAddressStr) {
+    throw new Error("NEXT_PUBLIC_ADMIN_ADDRESS is not set in the environment.");
+  }
+  const adminAddress = new PublicKey(adminAddressStr);
+  const [globalConfig] = PublicKey.findProgramAddressSync(
+    [Buffer.from("global_config")],
+    program.programId
+  );
+  const adminTokenAccount = getAssociatedTokenAddressSync(params.mint, adminAddress, true);
+
   for (const row of params.rows) {
     const recipient = new PublicKey(row.wallet);
     const amountRaw = decimalToRaw(row.amount, decimals);
@@ -271,8 +282,13 @@ export async function buildCreateStreamTransaction(params: {
         funder: params.wallet.publicKey,
         recipient,
         funderTokenAccount,
+        mint: params.mint,
         vestingTokenAccount: vault,
+        globalConfig,
+        adminAddress,
+        adminTokenAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId
       })
       .instruction();

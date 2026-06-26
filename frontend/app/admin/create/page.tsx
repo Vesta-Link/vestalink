@@ -149,6 +149,20 @@ function CreateStreamPageInner() {
     });
   }, [manualRows, t.create.duplicateWallet, t.create.invalidAmount, t.create.invalidWallet, t.create.missingFields]);
 
+  const subtotalAmount = useMemo(() => {
+    let total = 0;
+    const activeRows = formTab === "manual" ? manualValidation : parsedCsvRows;
+    activeRows.forEach((row) => {
+      if (row.status === "valid") {
+        total += Number(row.amount.replaceAll(",", ""));
+      }
+    });
+    return total;
+  }, [formTab, manualValidation, parsedCsvRows]);
+
+  const adminFeeAmount = subtotalAmount * 0.005;
+  const totalDeductedAmount = subtotalAmount + adminFeeAmount;
+
   function txStateLabel(state: TxState, action: string) {
     if (state === "building") return t.create.building;
     if (state === "approving") return t.create.approving;
@@ -578,6 +592,20 @@ function CreateStreamPageInner() {
                 <div className="review-box">
                   <p><strong>{t.create.tokenMint}:</strong> {mint}</p>
                   <p><strong>{t.create.totalRecipients}:</strong> {formTab === "manual" ? manualValidation.filter((row) => row.status === "valid").length : parsedCsvRows.filter((row) => row.status === "valid").length}</p>
+                  <hr style={{ margin: "12px 0", border: "none", borderTop: "1px solid var(--border)" }} />
+                  <p style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span><strong>Subtotal:</strong></span>
+                    <span>{subtotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} Tokens</span>
+                  </p>
+                  <p style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span><strong>Admin Fee (0.5%):</strong></span>
+                    <span>{adminFeeAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} Tokens</span>
+                  </p>
+                  <p style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.1em' }}>
+                    <span><strong>Total Deducted from Wallet:</strong></span>
+                    <span><strong>{totalDeductedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} Tokens</strong></span>
+                  </p>
+                  <hr style={{ margin: "12px 0", border: "none", borderTop: "1px solid var(--border)" }} />
                   <p><strong>{t.create.startTime}:</strong> {new Date(start).toLocaleString()}</p>
                   <p><strong>{t.create.endTime}:</strong> {new Date(end).toLocaleString()}</p>
                   {cliff && <p><strong>{t.create.cliffTime}:</strong> {new Date(cliff).toLocaleString()}</p>}
@@ -624,7 +652,7 @@ function CreateStreamPageInner() {
                           className="button secondary compact"
                           onClick={() => {
                             void navigator.clipboard.writeText(`${globalThis.location.origin}/stream/${id}`);
-                            window.alert(t.common.copied);
+                            globalThis.alert(t.common.copied);
                           }}
                         >
                           {t.common.copy}
