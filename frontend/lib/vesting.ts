@@ -219,7 +219,9 @@ export async function buildCreateStreamTransaction(params: {
   rows: { wallet: string; amount: string }[];
   startTime: number;
   endTime: number;
+  vestingType: "linear" | "cliff" | "milestone";
   cliffTime?: number;
+  milestoneCount?: number;
 }) {
   const provider = getProvider(params.connection, params.wallet);
   const program = getProgram(provider);
@@ -264,8 +266,12 @@ export async function buildCreateStreamTransaction(params: {
     );
 
     const resolvedCliff = params.cliffTime ?? params.startTime;
-    const vestingType =
-      resolvedCliff > params.startTime ? { cliff: {} } : { linear: {} };
+    let vestingType: any = { linear: {} };
+    if (params.vestingType === "milestone") {
+      vestingType = { milestone: {} };
+    } else if (params.vestingType === "cliff") {
+      vestingType = { cliff: {} };
+    }
 
     const instruction = await program.methods
       .createStream({
@@ -274,7 +280,7 @@ export async function buildCreateStreamTransaction(params: {
         startTime: new anchor.BN(params.startTime),
         endTime: new anchor.BN(params.endTime),
         cliffTime: new anchor.BN(resolvedCliff),
-        milestoneCount: 0,
+        milestoneCount: params.vestingType === "milestone" ? (params.milestoneCount || 1) : 0,
         nonce
       })
       .accountsPartial({
@@ -366,6 +372,49 @@ export async function buildCancelStreamTransaction(params: {
     .instruction();
 
   return new Transaction().add(cancel);
+}
+
+export async function buildUnlockMilestoneTransaction(params: {
+  connection: Connection;
+  wallet: AppWallet;
+  stream: StreamView;
+}) {
+  const provider = getProvider(params.connection, params.wallet);
+  const program = getProgram(provider);
+
+  const unlock = await program.methods
+    .unlockMilestone()
+    .accountsPartial({
+      vestingState: params.stream.publicKey,
+      authorityMilestone: params.wallet.publicKey,
+    })
+    .instruction();
+
+  return new Transaction().add(unlock);
+}
+
+export async function buildUnlockGroupMilestoneTransaction(params: {
+  connection: Connection;
+  wallet: AppWallet;
+  streams: StreamView[];
+}) {
+  const provider = getProvider(params.connection, params.wallet);
+  const program = getProgram(provider);
+
+  const transaction = new Transaction();
+
+  for (const stream of params.streams) {
+    const unlock = await program.methods
+      .unlockMilestone()
+      .accountsPartial({
+        vestingState: stream.publicKey,
+        authorityMilestone: params.wallet.publicKey,
+      })
+      .instruction();
+    transaction.add(unlock);
+  }
+
+  return transaction;
 }
 
 export async function buildRequestVestaTransaction(params: {
@@ -508,6 +557,11 @@ function calculateUnlocked(
   account: VestalinkAccount
 ) {
   if (account.isRevoked) return BigInt(account.vestedAmountAtRevocation.toString());
+
+  if (account.milestoneCount > 0 && typeof account.vestingType === "object" && account.vestingType !== null && "milestone" in account.vestingType) {
+    return (total * BigInt(account.milestonesReached)) / BigInt(account.milestoneCount);
+  }
+
   if (now <= start) return 0n;
   if (now >= end) return total;
 
@@ -539,41 +593,43 @@ async function resolveVault(connection: Connection, vestingState: PublicKey) {
   };
 }
 
-export function serializeTransactionError(error: unknown) {
+export function serializeTransactionError(error: unknown, translations?: Record<string, string>) {
   const stringifiedError = typeof error === "string" ? error : "";
   const rawMessage = error instanceof Error ? error.message : stringifiedError;
   const message = rawMessage.toLowerCase();
+  
+  const t = translations || {};
 
   if (/reject|cancel|declined|denied|user rejected/.test(message)) {
-    return "Wallet signature rejected. Please approve the transaction to continue.";
+    return t.walletRejected || "Wallet signature rejected. Please approve the transaction to continue.";
   }
 
   if (/insufficient|0x1|attempt to debit|no prior credit|funds|balance/.test(message)) {
-    return "Insufficient token or SOL balance for this stream. Please check your wallet.";
+    return t.insufficientBalance || "Insufficient token or SOL balance for this stream. Please check your wallet.";
   }
 
   if (/method not found|unknown instruction|instruction fallback|requestvesta|request_vesta/.test(message)) {
-    return "The deployed contract does not support Request VESTA yet. Please contact the team.";
+    return t.unsupportedContract || "The deployed contract does not support Request VESTA yet. Please contact the team.";
   }
 
   if (/blockhash|timeout|network|fetch|rpc|503|504|429/.test(message)) {
-    return "RPC timeout. Transaction may still be processing. Check explorer or retry.";
+    return t.rpcTimeout || "RPC timeout. Transaction may still be processing. Check explorer or retry.";
   }
 
   if (/mint|token account|owner does not match|invalid account data|account not found/.test(message)) {
-    return "Unable to find token account for this wallet. Recipient may need to initialize it.";
+    return t.noTokenAccount || "Unable to find token account for this wallet. Recipient may need to initialize it.";
   }
   
   if (/public key|invalid recipient/.test(message)) {
-    return "Invalid recipient wallet address.";
+    return t.invalidRecipient || "Invalid recipient wallet address.";
   }
 
   if (/internal error|unexpected error/.test(message)) {
-    return "Something went wrong while sending the transaction. Please try again or share this error with the team.";
+    return t.internalError || "Something went wrong while sending the transaction. Please try again or share this error with the team.";
   }
 
   if (rawMessage) return rawMessage;
-  return "Transaction failed. Please try again.";
+  return t.txFailed || "Transaction failed. Please try again.";
 }
 
 export function isWalletCancellation(error: unknown) {
