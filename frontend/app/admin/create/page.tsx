@@ -1,16 +1,31 @@
 "use client";
 
-import bs58 from "bs58";
-import { Coins, Send, ArrowRight, ArrowLeft, CircleHelp, Info } from "lucide-react";
-import { useMemo, useState } from "react";
 import { PublicKey } from "@solana/web3.js";
+import bs58 from "bs58";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  CircleHelp,
+  Coins,
+  Info,
+  Plus,
+  Search,
+  Send,
+  Trash2,
+  X
+} from "lucide-react";
 import Link from "next/link";
+import { useMemo, useState } from "react";
 
 import {
   PRIVY_CONFIGURED,
   useActiveSolanaWallet,
   useSignAndSendTransaction
 } from "@/components/privy-provider";
+import { usePreferences } from "@/components/preferences-provider";
+import { DEVNET_TOKENS, type DevnetToken } from "@/lib/devnet-tokens";
+import { formatMessage } from "@/lib/i18n";
 import {
   VESTA_FAUCET_AMOUNT,
   VESTA_MINT,
@@ -21,16 +36,9 @@ import {
   parseCsvRows,
   prepareUnsignedTransaction,
   serializeTransactionError,
+  shorten,
   type RecipientInputRow
 } from "@/lib/vesting";
-
-const TEST_TOKEN_PRESETS = [
-  {
-    label: "VESTA test token",
-    mint: VESTA_MINT.toBase58(),
-    description: "Devnet dummy SPL token for testing the vesting workflow."
-  }
-];
 
 type FaucetToast = {
   type: "success" | "error";
@@ -40,24 +48,8 @@ type FaucetToast = {
 };
 
 type TxState = "idle" | "building" | "approving" | "sending" | "confirming" | "success" | "error";
-
-type CreateStreamStep =
-  | "select_token"
-  | "recipient"
-  | "schedule"
-  | "review"
-  | "signing"
-  | "success";
-
-function txStateLabel(state: TxState, action: string) {
-  if (state === "building") return "Building transaction…";
-  if (state === "approving") return `Approve in wallet…`;
-  if (state === "sending") return "Sending…";
-  if (state === "confirming") return "Confirming…";
-  if (state === "success") return "Transaction Confirmed!";
-  if (state === "error") return "Transaction Failed";
-  return action;
-}
+type CreateStreamStep = "select_token" | "recipient" | "schedule" | "review" | "signing" | "success";
+type ManualRecipientRow = { id: string; wallet: string; amount: string };
 
 function defaultDate(minutesFromNow: number) {
   const date = new Date(Date.now() + minutesFromNow * 60 * 1000);
@@ -74,17 +66,33 @@ function parseLocalDateTime(value: string, label: string) {
   return Math.floor(time / 1000);
 }
 
+function createRecipientRow(): ManualRecipientRow {
+  return {
+    id: crypto.randomUUID(),
+    wallet: "",
+    amount: ""
+  };
+}
+
+function isValidPublicKey(value: string) {
+  try {
+    new PublicKey(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export default function CreateStreamPage() {
+  const { t } = usePreferences();
+
   if (!PRIVY_CONFIGURED) {
     return (
       <main className="page-shell single-column">
         <section className="panel">
-          <p className="eyebrow">Admin</p>
-          <h1>Privy app ID required</h1>
-          <p className="muted">
-            Set NEXT_PUBLIC_PRIVY_APP_ID in frontend/.env.local to connect wallets and create
-            vesting streams.
-          </p>
+          <p className="eyebrow">{t.create.eyebrow}</p>
+          <h1>{t.common.privyRequiredTitle}</h1>
+          <p className="muted">{t.create.privyRequired}</p>
         </section>
       </main>
     );
@@ -94,49 +102,67 @@ export default function CreateStreamPage() {
 }
 
 function CreateStreamPageInner() {
+  const { t } = usePreferences();
   const connection = useMemo(() => getConnection(), []);
   const { wallet, publicKey } = useActiveSolanaWallet();
   const { signAndSendTransaction } = useSignAndSendTransaction();
 
-  // Stream Wizard State
   const [step, setStep] = useState<CreateStreamStep>("select_token");
-
-  // Form state
-  const [formTab, setFormTab] = useState<"single" | "csv">("single");
+  const [formTab, setFormTab] = useState<"manual" | "csv">("manual");
   const [mint, setMint] = useState("");
-  const [selectedPreset, setSelectedPreset] = useState("");
-
-  // Single-recipient fields
-  const [recipient, setRecipient] = useState("");
-  const [amount, setAmount] = useState("");
-  const [cliff, setCliff] = useState("");
-
-  // CSV fields
+  const [selectedToken, setSelectedToken] = useState<DevnetToken | null>(null);
+  const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
+  const [manualRows, setManualRows] = useState<ManualRecipientRow[]>([createRecipientRow()]);
   const [rows, setRows] = useState("");
   const [start, setStart] = useState(defaultDate(5));
   const [end, setEnd] = useState(defaultDate(60 * 24 * 30));
-
-  // Tx state
+  const [cliff, setCliff] = useState("");
   const [txState, setTxState] = useState<TxState>("idle");
   const [isRequestingVesta, setIsRequestingVesta] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [faucetToast, setFaucetToast] = useState<FaucetToast | null>(null);
-
-  // New state for success link
   const [createdStreamIds, setCreatedStreamIds] = useState<string[]>([]);
   const [showTutorial, setShowTutorial] = useState(false);
 
   const parsedCsvRows = useMemo<RecipientInputRow[]>(() => {
-    if (formTab === "single") return [];
+    if (formTab === "manual") return [];
     if (!rows.trim()) return [];
     return parseCsvRows(rows);
   }, [rows, formTab]);
 
+  const manualValidation = useMemo(() => {
+    const seen = new Set<string>();
+    return manualRows.map((row) => {
+      const walletValue = row.wallet.trim();
+      const amountValue = row.amount.trim();
+      let errorMessage = "";
+      if (!walletValue || !amountValue) errorMessage = t.create.missingFields;
+      else if (!isValidPublicKey(walletValue)) errorMessage = t.create.invalidWallet;
+      else if (Number.isNaN(Number(amountValue.replaceAll(",", ""))) || Number(amountValue.replaceAll(",", "")) <= 0) {
+        errorMessage = t.create.invalidAmount;
+      } else if (seen.has(walletValue)) {
+        errorMessage = t.create.duplicateWallet;
+      }
+      seen.add(walletValue);
+      return { ...row, status: errorMessage ? "invalid" as const : "valid" as const, error: errorMessage };
+    });
+  }, [manualRows, t.create.duplicateWallet, t.create.invalidAmount, t.create.invalidWallet, t.create.missingFields]);
+
+  function txStateLabel(state: TxState, action: string) {
+    if (state === "building") return t.create.building;
+    if (state === "approving") return t.create.approving;
+    if (state === "sending") return t.create.sending;
+    if (state === "confirming") return t.create.confirming;
+    if (state === "success") return t.create.txSuccess;
+    if (state === "error") return t.create.txFailed;
+    return action;
+  }
+
   async function runSignedTx(
     buildFn: () => Promise<{ bytes: Uint8Array; blockhash: string; lastValidBlockHeight: number }>
   ) {
-    if (!wallet || !publicKey) throw new Error("Connect a wallet first.");
+    if (!wallet || !publicKey) throw new Error(t.create.connectWallet);
     setTxState("building");
     const prepared = await buildFn();
     setTxState("approving");
@@ -164,32 +190,33 @@ function CreateStreamPageInner() {
     setError("");
     setSuccess("");
     if (!wallet || !publicKey) {
-      setError("Connect an admin wallet first.");
+      setError(t.create.connectAdmin);
       return;
     }
     setStep("signing");
     try {
       let finalRows: { wallet: string; amount: string }[] = [];
 
-      if (formTab === "single") {
-        finalRows = [{ wallet: recipient.trim(), amount: amount.trim() }];
-      } else {
-        const invalidRows = parsedCsvRows.filter(r => r.status === "invalid");
-        if (invalidRows.length > 0) {
-          throw new Error("Cannot create stream with invalid recipients. Please fix them.");
+      if (formTab === "manual") {
+        const validRows = manualValidation.filter((row) => row.status === "valid");
+        if (validRows.length !== manualRows.length || validRows.length === 0) {
+          throw new Error(t.create.manualRequired);
         }
-        finalRows = parsedCsvRows.map(r => ({ wallet: r.wallet, amount: r.amount }));
+        finalRows = validRows.map((row) => ({ wallet: row.wallet.trim(), amount: row.amount.trim() }));
+      } else {
+        const invalidRows = parsedCsvRows.filter((row) => row.status === "invalid");
+        if (invalidRows.length > 0) throw new Error(t.create.invalidRecipients);
+        finalRows = parsedCsvRows.map((row) => ({ wallet: row.wallet, amount: row.amount }));
       }
 
-      const cliffTime = cliff ? parseLocalDateTime(cliff, "Cliff") : undefined;
-
+      const cliffTime = cliff ? parseLocalDateTime(cliff, t.create.cliff) : undefined;
       const { transaction, streams: newStreamAccounts } = await buildCreateStreamTransaction({
         connection,
         wallet: { publicKey },
         mint: new PublicKey(mint.trim()),
         rows: finalRows,
-        startTime: parseLocalDateTime(start, "Start"),
-        endTime: parseLocalDateTime(end, "End"),
+        startTime: parseLocalDateTime(start, t.create.start),
+        endTime: parseLocalDateTime(end, t.create.end),
         cliffTime
       });
 
@@ -197,34 +224,29 @@ function CreateStreamPageInner() {
         prepareUnsignedTransaction({ connection, transaction, feePayer: publicKey })
       );
 
-      setSuccess(`Transaction confirmed: ${signature}`);
-      setCreatedStreamIds(newStreamAccounts.map(s => s.vestingState.toBase58()));
+      setSuccess(formatMessage(t.create.txConfirmed, { signature }));
+      setCreatedStreamIds(newStreamAccounts.map((stream) => stream.vestingState.toBase58()));
       setStep("success");
-
-      if (formTab === "single") {
-        setRecipient("");
-        setAmount("");
-        setCliff("");
-      } else {
-        setRows("");
-      }
+      if (formTab === "manual") setManualRows([createRecipientRow()]);
+      else setRows("");
+      setCliff("");
     } catch (err) {
       setTxState("error");
       setError(serializeTransactionError(err));
-      // Give them a chance to go back and fix
       setTimeout(() => setStep("review"), 3000);
     }
   }
 
-  function selectPreset(value: string) {
-    setSelectedPreset(value);
-    if (value) setMint(value);
+  function selectToken(token: DevnetToken | null, customMint?: string) {
+    setSelectedToken(token);
+    setMint(token?.mint ?? customMint ?? "");
+    setTokenPickerOpen(false);
   }
 
   async function requestVesta() {
     setFaucetToast(null);
     if (!wallet || !publicKey) {
-      setFaucetToast({ type: "error", title: "Request failed", message: "Connect a wallet first." });
+      setFaucetToast({ type: "error", title: t.create.requestFailed, message: t.create.connectWallet });
       return;
     }
     let signature = "";
@@ -234,24 +256,44 @@ function CreateStreamPageInner() {
       const prepared = await prepareUnsignedTransaction({ connection, transaction, feePayer: publicKey });
       const result = await signAndSendTransaction({ transaction: prepared.bytes, wallet, chain: "solana:devnet" });
       signature = bs58.encode(result.signature);
-      await connection.confirmTransaction({ signature, blockhash: prepared.blockhash, lastValidBlockHeight: prepared.lastValidBlockHeight }, "confirmed");
-      setSelectedPreset(VESTA_MINT.toBase58());
-      setMint(VESTA_MINT.toBase58());
-      setFaucetToast({ type: "success", title: "VESTA requested", message: `Minted ${VESTA_FAUCET_AMOUNT} VESTA to your wallet.`, signature });
+      await connection.confirmTransaction(
+        { signature, blockhash: prepared.blockhash, lastValidBlockHeight: prepared.lastValidBlockHeight },
+        "confirmed"
+      );
+      selectToken(DEVNET_TOKENS[0]);
+      setFaucetToast({
+        type: "success",
+        title: t.create.faucetSuccessTitle,
+        message: formatMessage(t.create.faucetSuccess, { amount: VESTA_FAUCET_AMOUNT }),
+        signature
+      });
     } catch (err) {
-      const message = serializeTransactionError(err);
-      setFaucetToast({ type: "error", title: "Request failed", message, signature: signature || undefined });
+      setFaucetToast({
+        type: "error",
+        title: t.create.requestFailed,
+        message: serializeTransactionError(err),
+        signature: signature || undefined
+      });
     } finally {
       setIsRequestingVesta(false);
     }
   }
 
-  const isSubmitting = txState !== "idle" && txState !== "success" && txState !== "error";
+  function updateManualRow(id: string, field: "wallet" | "amount", value: string) {
+    setManualRows((current) => current.map((row) => (row.id === id ? { ...row, [field]: value } : row)));
+  }
 
+  function removeManualRow(id: string) {
+    setManualRows((current) => (current.length === 1 ? current : current.filter((row) => row.id !== id)));
+  }
+
+  const isSubmitting = txState !== "idle" && txState !== "success" && txState !== "error";
+  const selectedIsVesta = mint === VESTA_MINT.toBase58();
   const canProceedToRecipient = mint.trim() !== "";
-  const canProceedToSchedule = formTab === "single"
-    ? (recipient.trim() !== "" && amount.trim() !== "")
-    : (parsedCsvRows.length > 0 && parsedCsvRows.every(r => r.status === "valid"));
+  const canProceedToSchedule =
+    formTab === "manual"
+      ? manualValidation.length > 0 && manualValidation.every((row) => row.status === "valid")
+      : parsedCsvRows.length > 0 && parsedCsvRows.every((row) => row.status === "valid");
   const canProceedToReview = start !== "" && end !== "";
 
   return (
@@ -263,12 +305,12 @@ function CreateStreamPageInner() {
             <p>{faucetToast.message}</p>
             {faucetToast.signature && (
               <a href={explorerUrl(faucetToast.signature, "tx")} target="_blank" rel="noreferrer">
-                Tx {faucetToast.signature.slice(0, 8)}...{faucetToast.signature.slice(-8)}
+                Tx {shorten(faucetToast.signature, 8)}
               </a>
             )}
           </div>
-          <button type="button" onClick={() => setFaucetToast(null)} aria-label="Dismiss">
-            Close
+          <button type="button" onClick={() => setFaucetToast(null)} aria-label={t.common.close}>
+            {t.common.close}
           </button>
         </div>
       )}
@@ -276,214 +318,209 @@ function CreateStreamPageInner() {
       {showTutorial && (
         <dialog open className="modal-backdrop" aria-labelledby="tutorial-dialog-title">
           <div className="modal-box">
-            <h2 id="tutorial-dialog-title">How to create a stream</h2>
+            <h2 id="tutorial-dialog-title">{t.create.tutorialTitle}</h2>
             <div className="stack">
-              <p>1. Ensure your wallet is connected to the Solana Devnet.</p>
-              <p>2. Request VESTA test tokens if you need them.</p>
-              <p>3. Go through the wizard to input recipient(s) and set up the vesting schedule.</p>
-              <p>4. Review the details and sign the transaction in your wallet.</p>
-              <p>5. Share the generated link with the recipient so they can claim their tokens.</p>
+              {t.create.tutorial.map((item, index) => (
+                <p key={item}>{index + 1}. {item}</p>
+              ))}
             </div>
-            <div className="modal-actions" style={{ marginTop: 20 }}>
+            <div className="modal-actions">
               <button className="button primary compact" type="button" onClick={() => setShowTutorial(false)}>
-                Got it
+                {t.create.gotIt}
               </button>
             </div>
           </div>
         </dialog>
       )}
 
+      {tokenPickerOpen && (
+        <TokenPicker
+          mint={mint}
+          onClose={() => setTokenPickerOpen(false)}
+          onSelect={selectToken}
+        />
+      )}
+
       <main className="page-shell single-column">
-        <div style={{ marginBottom: 24 }}>
-          <Link href="/admin" className="button secondary compact" style={{ display: 'inline-flex' }}>
-            <ArrowLeft size={16} /> Back to Dashboard
+        <div className="page-back-row">
+          <Link href="/admin" className="button secondary compact">
+            <ArrowLeft size={16} aria-hidden="true" /> {t.create.backDashboard}
           </Link>
         </div>
 
         <section className="panel form-panel">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div className="form-header-row">
             <div>
-              <p className="eyebrow">Admin</p>
-              <h1>Create vesting streams</h1>
-              <p className="muted">
-                Fund linear token streams from your connected wallet. Each recipient gets a PDA vault
-                owned by the stream account.
-              </p>
+              <p className="eyebrow">{t.create.eyebrow}</p>
+              <h1>{t.create.title}</h1>
+              <p className="muted">{t.create.subtitle}</p>
             </div>
-            <button className="icon-button" type="button" onClick={() => setShowTutorial(true)} aria-label="View Guide" title="View Guide">
-              <CircleHelp size={20} />
+            <button className="icon-button" type="button" onClick={() => setShowTutorial(true)} aria-label={t.create.guide} title={t.create.guide}>
+              <CircleHelp size={20} aria-hidden="true" />
             </button>
           </div>
 
-          <div style={{ marginTop: 16, marginBottom: 24, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--muted)' }}>
-            <Info size={14} />
-            <span>Works with Phantom, Solflare, and other wallets supported by Privy.</span>
+          <div className="inline-note">
+            <Info size={14} aria-hidden="true" />
+            <span>{t.create.walletNote}</span>
           </div>
 
           <form className="stack wizard-form" onSubmit={onSubmit} aria-busy={isSubmitting}>
-
-            {/* WIZARD PROGRESS */}
-            <div className="wizard-progress" style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-              {["select_token", "recipient", "schedule", "review", "signing", "success"].map((s, idx) => {
-                const completedColor = ["select_token", "recipient", "schedule", "review", "signing", "success"].indexOf(step) > idx ? 'var(--foreground)' : 'var(--border)';
+            <div className="wizard-progress" aria-label="Progress">
+              {t.create.steps.map((label, index) => {
+                const keys: CreateStreamStep[] = ["select_token", "recipient", "schedule", "review", "signing", "success"];
+                const activeIndex = keys.indexOf(step);
                 return (
-                  <div key={s} style={{
-                    flex: 1,
-                    height: 4,
-                    background: step === s ? 'var(--foreground)' : completedColor,
-                    borderRadius: 4
-                  }} />
+                  <span
+                    key={label}
+                    className={index <= activeIndex ? "active" : ""}
+                    title={label}
+                  />
                 );
               })}
             </div>
 
-            {/* STEP 1: SELECT TOKEN */}
             {step === "select_token" && (
               <div className="wizard-step">
-                <h3>1. Select Token</h3>
-                <div className="field">
-                  <label htmlFor="token-preset">Token preset</label>
-                  <select
-                    id="token-preset"
-                    value={selectedPreset}
-                    onChange={(event) => selectPreset(event.target.value)}
-                  >
-                    <option value="">Custom SPL token</option>
-                    {TEST_TOKEN_PRESETS.map((preset) => (
-                      <option key={preset.mint} value={preset.mint}>
-                        {preset.label}
-                      </option>
-                    ))}
-                  </select>
-                  {selectedPreset && (
-                    <p className="hint">
-                      {TEST_TOKEN_PRESETS.find((preset) => preset.mint === selectedPreset)?.description}
-                    </p>
-                  )}
-                </div>
+                <h3>{t.create.selectToken}</h3>
+                <button className="token-select-button" type="button" onClick={() => setTokenPickerOpen(true)}>
+                  <span className="token-avatar">{selectedToken?.symbol.slice(0, 2) ?? t.common.token.slice(0, 2)}</span>
+                  <span>
+                    <strong>{selectedToken?.symbol ?? t.create.chooseToken}</strong>
+                    <small>{selectedToken?.name ?? t.create.chooseTokenHint}</small>
+                  </span>
+                  <ArrowRight size={16} aria-hidden="true" />
+                </button>
 
-                {selectedPreset === VESTA_MINT.toBase58() && (
+                {selectedIsVesta && (
                   <div className="faucet-card">
                     <div>
-                      <strong>Need test tokens?</strong>
-                      <p className="hint">Mint {VESTA_FAUCET_AMOUNT} VESTA to your connected wallet.</p>
+                      <strong>{t.create.needTokens}</strong>
+                      <p className="hint">{formatMessage(t.create.faucetHint, { amount: VESTA_FAUCET_AMOUNT })}</p>
                     </div>
-                    <button
-                      className="button secondary compact"
-                      type="button"
-                      onClick={requestVesta}
-                      disabled={isRequestingVesta}
-                    >
+                    <button className="button secondary compact" type="button" onClick={requestVesta} disabled={isRequestingVesta}>
                       <Coins size={15} aria-hidden="true" />
-                      {isRequestingVesta ? "Requesting..." : "Request VESTA"}
+                      {isRequestingVesta ? t.create.requesting : t.create.requestVesta}
                     </button>
                   </div>
                 )}
 
                 <div className="field">
-                  <label htmlFor="mint">Token mint</label>
+                  <label htmlFor="mint">{t.create.tokenMint}</label>
                   <input
                     id="mint"
                     value={mint}
-                    onChange={(event) => setMint(event.target.value)}
-                    placeholder="Devnet SPL mint address"
+                    onChange={(event) => {
+                      setMint(event.target.value);
+                      setSelectedToken(DEVNET_TOKENS.find((token) => token.mint === event.target.value) ?? null);
+                    }}
+                    placeholder={t.create.tokenMintPlaceholder}
                     spellCheck={false}
                     required
                   />
                 </div>
-                <div className="action-row" style={{ justifyContent: 'flex-end' }}>
+                <div className="action-row align-end">
                   <button type="button" className="button primary" disabled={!canProceedToRecipient} onClick={() => setStep("recipient")}>
-                    Next <ArrowRight size={16} />
+                    {t.common.next} <ArrowRight size={16} aria-hidden="true" />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* STEP 2: RECIPIENT */}
             {step === "recipient" && (
               <div className="wizard-step">
-                <h3>2. Add Recipient(s)</h3>
+                <h3>{t.create.addRecipients}</h3>
                 <div className="tab-bar" role="tablist" aria-label="Entry mode">
-                  <button
-                    role="tab"
-                    type="button"
-                    aria-selected={formTab === "single"}
-                    className={`tab ${formTab === "single" ? "active" : ""}`}
-                    onClick={() => setFormTab("single")}
-                  >
-                    Single recipient
+                  <button role="tab" type="button" aria-selected={formTab === "manual"} className={`tab ${formTab === "manual" ? "active" : ""}`} onClick={() => setFormTab("manual")}>
+                    {t.create.manualInput}
                   </button>
-                  <button
-                    role="tab"
-                    type="button"
-                    aria-selected={formTab === "csv"}
-                    className={`tab ${formTab === "csv" ? "active" : ""}`}
-                    onClick={() => setFormTab("csv")}
-                  >
-                    Batch CSV
+                  <button role="tab" type="button" aria-selected={formTab === "csv"} className={`tab ${formTab === "csv" ? "active" : ""}`} onClick={() => setFormTab("csv")}>
+                    {t.create.batchCsv}
                   </button>
                 </div>
 
-                {formTab === "single" ? (
-                  <>
-                    <div className="field">
-                      <label htmlFor="recipient-address">Recipient wallet address</label>
-                      <input
-                        id="recipient-address"
-                        value={recipient}
-                        onChange={(event) => setRecipient(event.target.value)}
-                        placeholder="Solana wallet address"
-                        spellCheck={false}
-                      />
-                    </div>
-                    <div className="field">
-                      <label htmlFor="token-amount">Amount</label>
-                      <input
-                        id="token-amount"
-                        type="text"
-                        inputMode="decimal"
-                        value={amount}
-                        onChange={(event) => setAmount(event.target.value)}
-                        placeholder="e.g. 1000"
-                      />
-                    </div>
-                  </>
+                {formTab === "manual" ? (
+                  <div className="manual-recipient-list">
+                    {manualValidation.map((row, index) => (
+                      <div className="recipient-row" key={row.id}>
+                        <div className="field">
+                          <label htmlFor={`recipient-${row.id}`}>{t.create.recipientWallet}</label>
+                          <input
+                            id={`recipient-${row.id}`}
+                            value={row.wallet}
+                            onChange={(event) => updateManualRow(row.id, "wallet", event.target.value)}
+                            placeholder="Solana wallet address"
+                            spellCheck={false}
+                            aria-invalid={row.wallet && row.status === "invalid" ? "true" : undefined}
+                          />
+                        </div>
+                        <div className="field amount-field">
+                          <label htmlFor={`amount-${row.id}`}>{t.create.amountLabel}</label>
+                          <input
+                            id={`amount-${row.id}`}
+                            type="text"
+                            inputMode="decimal"
+                            value={row.amount}
+                            onChange={(event) => updateManualRow(row.id, "amount", event.target.value)}
+                            placeholder="1000"
+                            aria-invalid={row.amount && row.status === "invalid" ? "true" : undefined}
+                          />
+                        </div>
+                        <button
+                          className="icon-button remove-row-button"
+                          type="button"
+                          onClick={() => removeManualRow(row.id)}
+                          aria-label={t.create.removeRecipient}
+                          disabled={manualRows.length === 1}
+                        >
+                          <Trash2 size={16} aria-hidden="true" />
+                        </button>
+                        {row.status === "invalid" && (row.wallet || row.amount) && (
+                          <p className="field-error">
+                            {index + 1}. {row.error}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                    <button className="button secondary compact" type="button" onClick={() => setManualRows((current) => [...current, createRecipientRow()])}>
+                      <Plus size={16} aria-hidden="true" /> {t.create.addRecipient}
+                    </button>
+                  </div>
                 ) : (
                   <div className="field">
-                    <label htmlFor="recipients">Recipients and amounts (CSV/Paste)</label>
+                    <label htmlFor="recipients">{t.create.csvLabel}</label>
                     <textarea
                       id="recipients"
                       value={rows}
                       onChange={(event) => setRows(event.target.value)}
-                      placeholder={"wallet_address,1000\nwallet_address,250.5"}
+                      placeholder={t.create.csvPlaceholder}
                       spellCheck={false}
                       rows={7}
                     />
-                    <p className="hint">One recipient per line. Amounts use the mint decimals.</p>
+                    <p className="hint">{t.create.csvHint}</p>
 
-                    {/* CSV Validation Table */}
                     {parsedCsvRows.length > 0 && (
-                      <div className="validation-table" style={{ marginTop: 16, overflowX: 'auto' }}>
-                        <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <div className="validation-table">
+                        <table>
                           <thead>
-                            <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                              <th style={{ padding: '8px 4px' }}>Row</th>
-                              <th style={{ padding: '8px 4px' }}>Wallet</th>
-                              <th style={{ padding: '8px 4px' }}>Amount</th>
-                              <th style={{ padding: '8px 4px' }}>Status</th>
+                            <tr>
+                              <th>{t.common.row}</th>
+                              <th>{t.common.wallet}</th>
+                              <th>{t.common.amount}</th>
+                              <th>{t.common.status}</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {parsedCsvRows.map((row, i) => (
-                              <tr key={`${row.wallet}-${i}`} style={{ borderBottom: '1px solid var(--border)' }}>
-                                <td style={{ padding: '8px 4px', color: 'var(--muted)' }}>{row.originalRow}</td>
-                                <td style={{ padding: '8px 4px', fontFamily: 'monospace' }}>{row.wallet.slice(0, 8)}...{row.wallet.slice(-8)}</td>
-                                <td style={{ padding: '8px 4px' }}>{row.amount}</td>
-                                <td style={{ padding: '8px 4px' }}>
+                            {parsedCsvRows.map((row, index) => (
+                              <tr key={`${row.wallet}-${index}`}>
+                                <td>{row.originalRow}</td>
+                                <td className="mono-cell">{row.wallet ? shorten(row.wallet, 8) : "-"}</td>
+                                <td>{row.amount}</td>
+                                <td>
                                   {row.status === "valid" ? (
-                                    <span style={{ color: '#10B981' }}>Valid</span>
+                                    <span className="success-text">{t.common.valid}</span>
                                   ) : (
-                                    <span style={{ color: 'red' }}>Error: {row.error}</span>
+                                    <span className="danger-text">{t.common.error}: {row.error}</span>
                                   )}
                                 </td>
                               </tr>
@@ -495,156 +532,179 @@ function CreateStreamPageInner() {
                   </div>
                 )}
 
-                <div className="action-row" style={{ justifyContent: 'space-between' }}>
+                <div className="action-row spread">
                   <button type="button" className="button secondary" onClick={() => setStep("select_token")}>
-                    <ArrowLeft size={16} /> Back
+                    <ArrowLeft size={16} aria-hidden="true" /> {t.common.back}
                   </button>
                   <button type="button" className="button primary" disabled={!canProceedToSchedule} onClick={() => setStep("schedule")}>
-                    Next <ArrowRight size={16} />
+                    {t.common.next} <ArrowRight size={16} aria-hidden="true" />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* STEP 3: SCHEDULE */}
             {step === "schedule" && (
               <div className="wizard-step">
-                <h3>3. Configure Schedule</h3>
+                <h3>{t.create.configureSchedule}</h3>
                 <div className="field-grid">
                   <div className="field">
-                    <label htmlFor="start">Start</label>
-                    <input
-                      id="start"
-                      type="datetime-local"
-                      value={start}
-                      onChange={(event) => setStart(event.target.value)}
-                      required
-                    />
+                    <label htmlFor="start">{t.create.start}</label>
+                    <input id="start" type="datetime-local" value={start} onChange={(event) => setStart(event.target.value)} required />
                   </div>
                   <div className="field">
-                    <label htmlFor="end">End</label>
-                    <input
-                      id="end"
-                      type="datetime-local"
-                      value={end}
-                      onChange={(event) => setEnd(event.target.value)}
-                      required
-                    />
+                    <label htmlFor="end">{t.create.end}</label>
+                    <input id="end" type="datetime-local" value={end} onChange={(event) => setEnd(event.target.value)} required />
                   </div>
                 </div>
-
                 <div className="field">
-                  <label htmlFor="cliff">
-                    Cliff date <span className="hint-inline">(optional)</span>
-                  </label>
-                  <input
-                    id="cliff"
-                    type="datetime-local"
-                    value={cliff}
-                    onChange={(event) => setCliff(event.target.value)}
-                    min={start}
-                    max={end}
-                  />
-                  <p className="hint">No tokens unlock before this date. Defaults to the start date.</p>
+                  <label htmlFor="cliff">{t.create.cliff} <span className="hint-inline">({t.create.optional})</span></label>
+                  <input id="cliff" type="datetime-local" value={cliff} onChange={(event) => setCliff(event.target.value)} min={start} max={end} />
+                  <p className="hint">{t.create.cliffHint}</p>
                 </div>
-
-                <div className="action-row" style={{ justifyContent: 'space-between' }}>
+                <div className="action-row spread">
                   <button type="button" className="button secondary" onClick={() => setStep("recipient")}>
-                    <ArrowLeft size={16} /> Back
+                    <ArrowLeft size={16} aria-hidden="true" /> {t.common.back}
                   </button>
                   <button type="button" className="button primary" disabled={!canProceedToReview} onClick={() => setStep("review")}>
-                    Review <ArrowRight size={16} />
+                    {t.common.review} <ArrowRight size={16} aria-hidden="true" />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* STEP 4: REVIEW */}
             {step === "review" && (
               <div className="wizard-step">
-                <h3>4. Review Stream</h3>
-                <div className="panel" style={{ background: 'var(--surface)' }}>
-                  <p><strong>Token Mint:</strong> {mint}</p>
-                  <p><strong>Total Recipients:</strong> {formTab === "single" ? 1 : parsedCsvRows.filter(r => r.status === "valid").length}</p>
-                  <p><strong>Start Time:</strong> {new Date(start).toLocaleString()}</p>
-                  <p><strong>End Time:</strong> {new Date(end).toLocaleString()}</p>
-                  {cliff && <p><strong>Cliff Time:</strong> {new Date(cliff).toLocaleString()}</p>}
+                <h3>{t.create.reviewTitle}</h3>
+                <div className="review-box">
+                  <p><strong>{t.create.tokenMint}:</strong> {mint}</p>
+                  <p><strong>{t.create.totalRecipients}:</strong> {formTab === "manual" ? manualValidation.filter((row) => row.status === "valid").length : parsedCsvRows.filter((row) => row.status === "valid").length}</p>
+                  <p><strong>{t.create.startTime}:</strong> {new Date(start).toLocaleString()}</p>
+                  <p><strong>{t.create.endTime}:</strong> {new Date(end).toLocaleString()}</p>
+                  {cliff && <p><strong>{t.create.cliffTime}:</strong> {new Date(cliff).toLocaleString()}</p>}
                 </div>
-
                 {error && <p className="message error">{error}</p>}
-
-                <div className="action-row" style={{ justifyContent: 'space-between' }}>
+                <div className="action-row spread">
                   <button type="button" className="button secondary" onClick={() => setStep("schedule")}>
-                    <ArrowLeft size={16} /> Back
+                    <ArrowLeft size={16} aria-hidden="true" /> {t.common.back}
                   </button>
                   <button className="button primary" type="submit">
-                    <Send size={16} aria-hidden="true" />
-                    Sign and Submit
+                    <Send size={16} aria-hidden="true" /> {t.create.signSubmit}
                   </button>
                 </div>
               </div>
             )}
 
-            {/* STEP 5: SIGNING */}
             {step === "signing" && (
-              <div className="wizard-step" style={{ textAlign: 'center', padding: '40px 0' }}>
-                <div className="tx-state-bar" style={{ display: 'inline-flex', marginBottom: 24 }}>
+              <div className="wizard-step centered-step">
+                <div className="tx-state-bar">
                   <div className="tx-state-dot" />
-                  {txStateLabel(txState, "Processing")}
+                  {txStateLabel(txState, t.create.processing)}
                 </div>
-                <h3>Check your wallet</h3>
-                <p className="muted">Please approve the transaction in your connected wallet provider to create the streams.</p>
+                <h3>{t.create.checkWallet}</h3>
+                <p className="muted">{t.create.approveWallet}</p>
                 {error && <p className="message error">{error}</p>}
               </div>
             )}
 
-            {/* STEP 6: SUCCESS */}
             {step === "success" && (
-              <div className="wizard-step" style={{ textAlign: 'center', padding: '20px 0' }}>
-                <div style={{ display: 'flex', justifyContent: 'center', color: '#10B981', marginBottom: 16 }}>
-                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+              <div className="wizard-step centered-step">
+                <div className="success-orb">
+                  <Check size={36} aria-hidden="true" />
                 </div>
-                <h3>Streams Created Successfully!</h3>
+                <h3>{t.create.successTitle}</h3>
                 <p className="muted">{success}</p>
-
-                <div className="stack" style={{ textAlign: 'left', marginTop: 24 }}>
-                  {createdStreamIds.map((id, idx) => (
-                    <div key={id} className="panel" style={{ padding: 16 }}>
-                      <p className="eyebrow">Recipient {idx + 1} Link</p>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <input type="text" readOnly value={`${globalThis.location.origin}/stream/${id}`} style={{ flex: 1 }} />
-                        <button type="button" className="button secondary compact" onClick={() => {
-                          navigator.clipboard.writeText(`${globalThis.location.origin}/stream/${id}`);
-                          alert("Link copied!");
-                        }}>
-                          Copy Link
+                <div className="stack link-stack">
+                  {createdStreamIds.map((id, index) => (
+                    <div key={id} className="panel compact-link-panel">
+                      <p className="eyebrow">{formatMessage(t.create.linkLabel, { index: index + 1 })}</p>
+                      <div className="copy-row">
+                        <input type="text" readOnly value={`${globalThis.location.origin}/stream/${id}`} />
+                        <button
+                          type="button"
+                          className="button secondary compact"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(`${globalThis.location.origin}/stream/${id}`);
+                            window.alert(t.common.copied);
+                          }}
+                        >
+                          {t.common.copy}
                         </button>
                       </div>
                     </div>
                   ))}
                 </div>
-
-                <div className="action-row justify-center" style={{ marginTop: 32 }}>
-                  <button type="button" className="button secondary" onClick={() => {
-                    setStep("select_token");
-                    setFormTab("single");
-                    setRecipient("");
-                    setAmount("");
-                    setRows("");
-                    setSuccess("");
-                    setCreatedStreamIds([]);
-                  }}>
-                    Create Another Stream
-                  </button>
-                  <Link href="/admin" className="button primary">
-                    Go to Dashboard
-                  </Link>
-                </div>
+                <button type="button" className="button primary" onClick={() => { setStep("select_token"); setTxState("idle"); }}>
+                  {t.create.createAnother}
+                </button>
               </div>
             )}
           </form>
         </section>
       </main>
     </>
+  );
+}
+
+function TokenPicker({
+  mint,
+  onClose,
+  onSelect
+}: Readonly<{
+  mint: string;
+  onClose: () => void;
+  onSelect: (token: DevnetToken | null, customMint?: string) => void;
+}>) {
+  const { t } = usePreferences();
+  const [query, setQuery] = useState("");
+  const normalized = query.trim().toLowerCase();
+  const filteredTokens = DEVNET_TOKENS.filter((token) =>
+    [token.symbol, token.name, token.mint].some((value) => value.toLowerCase().includes(normalized))
+  );
+  const canUseCustom = query.trim() !== "" && isValidPublicKey(query.trim());
+
+  return (
+    <dialog open className="modal-backdrop token-picker-backdrop" aria-labelledby="token-picker-title">
+      <div className="modal-box token-picker">
+        <div className="token-picker-header">
+          <div>
+            <h2 id="token-picker-title">{t.create.chooseToken}</h2>
+            <p>{t.create.chooseTokenHint}</p>
+          </div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label={t.common.close}>
+            <X size={17} aria-hidden="true" />
+          </button>
+        </div>
+        <label className="token-search">
+          <Search size={16} aria-hidden="true" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t.create.searchToken} spellCheck={false} autoFocus />
+        </label>
+        <div className="token-list">
+          {filteredTokens.map((token) => {
+            const selected = token.mint === mint;
+            return (
+              <button className={`token-row ${selected ? "selected" : ""}`} type="button" key={token.mint} onClick={() => onSelect(token)}>
+                <span className="token-avatar">{token.symbol.slice(0, 2)}</span>
+                <span>
+                  <strong>{token.symbol}</strong>
+                  <small>{token.name} · {shorten(token.mint, 6)}</small>
+                </span>
+                <span className="network-pill">Devnet</span>
+              </button>
+            );
+          })}
+          {canUseCustom && (
+            <button className="token-row" type="button" onClick={() => onSelect(null, query.trim())}>
+              <span className="token-avatar">{t.common.custom.slice(0, 2)}</span>
+              <span>
+                <strong>{t.create.customMint}</strong>
+                <small>{shorten(query.trim(), 6)}</small>
+              </span>
+              <span className="network-pill">Devnet</span>
+            </button>
+          )}
+          {filteredTokens.length === 0 && !canUseCustom && <p className="empty-token-copy">{t.create.noToken}</p>}
+        </div>
+      </div>
+    </dialog>
   );
 }

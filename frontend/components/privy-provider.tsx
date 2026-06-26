@@ -10,6 +10,7 @@ import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
 import { PublicKey } from "@solana/web3.js";
 import { ReactNode, useMemo } from "react";
 
+import { usePreferences } from "@/components/preferences-provider";
 import { RPC_URL, shorten } from "@/lib/vesting";
 
 const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "";
@@ -17,6 +18,8 @@ const rpcSubscriptionsUrl = RPC_URL.replace(/^http/, "ws");
 export const PRIVY_CONFIGURED = Boolean(privyAppId);
 
 export function PrivySolanaProvider({ children }: Readonly<{ children: ReactNode }>) {
+  const { theme } = usePreferences();
+
   if (!PRIVY_CONFIGURED) {
     return <>{children}</>;
   }
@@ -36,7 +39,7 @@ export function PrivySolanaProvider({ children }: Readonly<{ children: ReactNode
         appearance: {
           showWalletLoginFirst: true,
           walletChainType: "solana-only",
-          theme: "light",
+          theme,
           accentColor: "#080808"
         },
         loginMethods: ["wallet", "email"],
@@ -68,11 +71,12 @@ function PrivyConnectButton() {
   const { ready, authenticated, user } = usePrivy();
   const { login } = useLogin();
   const { wallet, address } = useActiveSolanaWallet();
+  const { t } = usePreferences();
 
   if (!ready) {
     return (
       <button className="button primary" type="button" disabled>
-        Loading...
+        {t.common.loading}
       </button>
     );
   }
@@ -80,7 +84,7 @@ function PrivyConnectButton() {
   if (!authenticated) {
     return (
       <button className="button primary" type="button" onClick={login}>
-        Connect
+        {t.common.connect}
       </button>
     );
   }

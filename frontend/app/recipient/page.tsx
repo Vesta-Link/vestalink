@@ -4,6 +4,7 @@ import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import bs58 from "bs58";
 
+import { usePreferences } from "@/components/preferences-provider";
 import { StreamCard } from "@/components/stream-card";
 import {
   PRIVY_CONFIGURED,
@@ -21,16 +22,15 @@ import {
 } from "@/lib/vesting";
 
 export default function RecipientPage() {
+  const { t } = usePreferences();
+
   if (!PRIVY_CONFIGURED) {
     return (
       <main className="page-shell single-column">
         <section className="panel">
-          <p className="eyebrow">Recipient</p>
-          <h1>Privy app ID required</h1>
-          <p className="muted">
-            Set NEXT_PUBLIC_PRIVY_APP_ID in frontend/.env.local to connect wallets and claim vested
-            tokens.
-          </p>
+          <p className="eyebrow">{t.recipient.eyebrow}</p>
+          <h1>{t.common.privyRequiredTitle}</h1>
+          <p className="muted">{t.recipient.privyRequired}</p>
         </section>
       </main>
     );
@@ -40,6 +40,7 @@ export default function RecipientPage() {
 }
 
 function RecipientPageInner() {
+  const { t } = usePreferences();
   const connection = useMemo(() => getConnection(), []);
   const { wallet, publicKey } = useActiveSolanaWallet();
   const { signAndSendTransaction } = useSignAndSendTransaction();
@@ -72,7 +73,7 @@ function RecipientPageInner() {
 
   async function claim(stream: StreamView) {
     if (!wallet || !publicKey) {
-      setError("Connect the recipient wallet first.");
+      setError(t.recipient.connectFirst);
       return;
     }
 
@@ -104,7 +105,7 @@ function RecipientPageInner() {
         },
         "confirmed"
       );
-      setSuccess(`Claimed ${rawToDecimal(stream.claimableRaw, stream.decimals)} tokens.`);
+      setSuccess(t.recipient.claimed.replace("{amount}", rawToDecimal(stream.claimableRaw, stream.decimals)));
       await loadStreams();
     } catch (err) {
       setError(serializeTransactionError(err));
@@ -118,14 +119,11 @@ function RecipientPageInner() {
       <section className="panel dashboard-panel">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Recipient</p>
-            <h1>Your vesting schedule</h1>
-            <p className="muted">
-              View locked, unlocked, and claimed tokens for streams assigned to your connected
-              wallet.
-            </p>
+            <p className="eyebrow">{t.recipient.eyebrow}</p>
+            <h1>{t.recipient.title}</h1>
+            <p className="muted">{t.recipient.subtitle}</p>
           </div>
-          <button className="icon-button" type="button" onClick={loadStreams} aria-label="Refresh">
+          <button className="icon-button" type="button" onClick={loadStreams} aria-label={t.common.refresh}>
             <RefreshCw size={17} aria-hidden="true" />
           </button>
         </div>
@@ -134,15 +132,15 @@ function RecipientPageInner() {
         {success && <p className="message success">{success}</p>}
 
         {loading ? (
-          <div className="skeleton-list" aria-label="Loading streams">
+          <div className="skeleton-list" aria-label={t.common.loading}>
             <span />
             <span />
             <span />
           </div>
         ) : recipientStreams.length === 0 ? (
           <div className="empty-state">
-            <strong>No recipient streams found</strong>
-            <p>Connect the wallet that was entered as the stream recipient.</p>
+            <strong>{t.recipient.emptyTitle}</strong>
+            <p>{t.recipient.emptyText}</p>
           </div>
         ) : (
           <div className="stream-list">
@@ -162,7 +160,7 @@ function RecipientPageInner() {
                       disabled={disabled}
                       onClick={() => claim(stream)}
                     >
-                      {isClaiming ? "Claiming..." : "Claim"}
+                      {isClaiming ? t.recipient.claiming : t.recipient.claim}
                     </button>
                   }
                 />

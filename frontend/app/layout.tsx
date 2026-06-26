@@ -1,9 +1,21 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 
-import { ConnectButton, PrivySolanaProvider } from "@/components/privy-provider";
+import { SiteHeader } from "@/components/site-header";
+import { ThemeLanguageProvider } from "@/components/preferences-provider";
+import { PrivySolanaProvider } from "@/components/privy-provider";
 
 import "./globals.css";
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-geist-sans"
+});
+
+const jetBrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-geist-mono"
+});
 
 export const metadata: Metadata = {
   title: "Vestalink",
@@ -12,24 +24,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
-      <body>
-        <PrivySolanaProvider>
-          <header className="site-header">
-            <Link href="/" className="brand" aria-label="Vestalink home">
-              Vestalink
-            </Link>
-            <nav className="nav-links" aria-label="Primary navigation">
-              <Link href="/admin">Admin</Link>
-              <Link href="/recipient">Recipient</Link>
-            </nav>
-            <div className="header-actions">
-              <span className="network-pill">Devnet</span>
-              <ConnectButton />
-            </div>
-          </header>
-          {children}
-        </PrivySolanaProvider>
+    <html lang="en" data-theme="light" suppressHydrationWarning>
+      <body className={`${spaceGrotesk.variable} ${jetBrainsMono.variable}`}>
+        <ThemeLanguageProvider>
+          <PrivySolanaProvider>
+            <SiteHeader />
+            {children}
+          </PrivySolanaProvider>
+        </ThemeLanguageProvider>
       </body>
     </html>
   );

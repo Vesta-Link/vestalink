@@ -1,137 +1,228 @@
+"use client";
+
+import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
+import { ArrowRight, CheckCircle, Clock, Coins, Database, Layers } from "lucide-react";
 import Link from "next/link";
-import { ArrowRight, CheckCircle, Clock, Database, Layers, Coins } from "lucide-react";
+
+import { usePreferences } from "@/components/preferences-provider";
+
+/* ---------------------------------------------------------
+ * LANDING CONTENT STORYBOARD
+ *
+ *    0ms   shell is interactive immediately
+ *   80ms   eyebrow fades in
+ *  180ms   headline lines reveal upward
+ *  420ms   supporting copy and CTAs settle in
+ *  scroll  token path draws down the page
+ *  scroll  cards receive short stream sweeps
+ *  scroll  audit timeline fills with progress
+ * --------------------------------------------------------- */
+
+const SPRING = { type: "spring" as const, stiffness: 320, damping: 30 };
+const CARD_STAGGER = 0.06;
+
+const sectionReveal = {
+  hidden: { opacity: 0, y: 18 },
+  visible: { opacity: 1, y: 0 }
+};
+
+function MotionSection({
+  children,
+  className = ""
+}: Readonly<{ children: React.ReactNode; className?: string }>) {
+  const reduceMotion = useReducedMotion();
+
+  return (
+    <motion.section
+      className={className}
+      initial={reduceMotion ? false : "hidden"}
+      whileInView="visible"
+      viewport={{ once: true, margin: "-80px" }}
+      variants={sectionReveal}
+      transition={reduceMotion ? { duration: 0 } : SPRING}
+    >
+      {children}
+    </motion.section>
+  );
+}
+
+function AnimatedWords({ text }: Readonly<{ text: string }>) {
+  const reduceMotion = useReducedMotion();
+  const words = text.split(" ");
+
+  if (reduceMotion) return <>{text}</>;
+
+  return (
+    <>
+      {words.map((word, index) => (
+        <motion.span
+          className="word-reveal"
+          key={`${word}-${index}`}
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ ...SPRING, delay: 0.16 + index * 0.025 }}
+        >
+          {word}
+          {index < words.length - 1 ? "\u00a0" : ""}
+        </motion.span>
+      ))}
+    </>
+  );
+}
 
 export default function Home() {
+  const { t } = usePreferences();
+  const reduceMotion = useReducedMotion();
+  const { scrollYProgress } = useScroll();
+  const pathScale = useTransform(scrollYProgress, [0.03, 0.88], [0, 1]);
+  const tokenY = useTransform(scrollYProgress, [0.02, 0.9], ["6vh", "82vh"]);
+  const tokenOpacity = useTransform(scrollYProgress, [0, 0.08, 0.92, 1], [0, 1, 1, 0]);
+  const timelineScale = useTransform(scrollYProgress, [0.62, 0.84], [0, 1]);
+
   return (
-    <main className="page-shell">
-      {/* Hero Section */}
-      <section className="intro hero-section">
-        <p className="eyebrow">Solana token streams</p>
-        <h1>Stream token distributions on Solana.</h1>
-        <p>
-          Create vesting streams for rewards, grants, bounties, and contributors.
-          Lock tokens once, let recipients claim.
-        </p>
-        <div className="action-row">
-          <Link className="button primary" href="/admin/create">
-            Create a Stream
-          </Link>
-          <Link className="button secondary" href="/recipient">
-            Claim Tokens
-          </Link>
+    <main className="page-shell landing-playground">
+      <div className="scroll-journey" aria-hidden="true">
+        <motion.span className="journey-line" style={{ scaleY: reduceMotion ? 1 : pathScale }} />
+        <motion.span className="journey-token" style={{ y: reduceMotion ? 0 : tokenY, opacity: reduceMotion ? 0.35 : tokenOpacity }} />
+      </div>
+      <section className="intro hero-section landing-hero">
+        <div className="hero-copy">
+          <motion.p
+            className="eyebrow"
+            initial={reduceMotion ? false : { opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...SPRING, delay: 0.08 }}
+          >
+            {t.landing.eyebrow}
+          </motion.p>
+          <h1>
+            <AnimatedWords text={t.landing.title} />
+          </h1>
+          <motion.p
+            initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...SPRING, delay: 0.42 }}
+          >
+            {t.landing.subtitle}
+          </motion.p>
+          <motion.div
+            className="action-row"
+            initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...SPRING, delay: 0.52 }}
+          >
+            <Link className="button primary" href="/admin/create">
+              {t.landing.create}
+            </Link>
+            <Link className="button secondary" href="/recipient">
+              {t.landing.claim}
+            </Link>
+          </motion.div>
         </div>
       </section>
 
-      {/* How It Works Section */}
-      <section className="landing-section">
+      <MotionSection className="landing-section journey-section">
         <div className="section-header">
-          <p className="eyebrow">How It Works</p>
-          <h2>Token vesting, simplified.</h2>
+          <p className="eyebrow">{t.landing.howEyebrow}</p>
+          <h2>{t.landing.howTitle}</h2>
         </div>
 
         <div className="steps-grid">
-          <div className="step-card">
-            <div className="step-icon"><CheckCircle size={24} /></div>
-            <h3>1. Configure Stream</h3>
-            <p>Input recipient, token amount, and schedule. Connect your wallet via Privy.</p>
-          </div>
-          <div className="step-card">
-            <div className="step-icon"><Database size={24} /></div>
-            <h3>2. Lock Tokens in Vault</h3>
-            <p>Tokens are securely moved to a PDA-owned SPL token account.</p>
-          </div>
-          <div className="step-card">
-            <div className="step-icon"><ArrowRight size={24} /></div>
-            <h3>3. Share Claim Link</h3>
-            <p>Generate a direct link for recipients to track and claim their stream.</p>
-          </div>
-          <div className="step-card">
-            <div className="step-icon"><Clock size={24} /></div>
-            <h3>4. Recipient Claims</h3>
-            <p>Recipients call the claim instruction to unlock their vested amount over time.</p>
-          </div>
+          {t.landing.steps.map(([title, body], index) => {
+            const icons = [CheckCircle, Database, ArrowRight, Clock];
+            const Icon = icons[index];
+            return (
+              <motion.div
+                className="step-card stream-sweep-card"
+                key={title}
+                initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-80px" }}
+                transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: index * CARD_STAGGER }}
+              >
+                <div className="step-icon">
+                  <Icon size={24} aria-hidden="true" />
+                </div>
+                <h3>{title}</h3>
+                <p>{body}</p>
+              </motion.div>
+            );
+          })}
         </div>
-      </section>
+      </MotionSection>
 
-      {/* Use Cases Section */}
-      <section className="landing-section surface-section">
+      <MotionSection className="landing-section surface-section journey-section">
         <div className="section-header">
-          <p className="eyebrow">Use Cases</p>
-          <h2>Built for teams and DAOs.</h2>
+          <p className="eyebrow">{t.landing.useEyebrow}</p>
+          <h2>{t.landing.useTitle}</h2>
         </div>
 
         <div className="use-case-grid">
-          <div className="use-case-card panel">
-            <Layers size={28} className="use-case-icon" />
-            <h3>Oracle Node Rewards</h3>
-            <p>Distribute node rewards to multiple operators simultaneously. Setup a stream and let recipients claim on their own schedule.</p>
-          </div>
-          <div className="use-case-card panel">
-            <Coins size={28} className="use-case-icon" />
-            <h3>Contributor and Bounty Payouts</h3>
-            <p>Pay contributors, bounty hunters, or builders gradually without manual transfers. Monitor the payout status from the dashboard.</p>
-          </div>
-          <div className="use-case-card panel">
-            <CheckCircle size={28} className="use-case-icon" />
-            <h3>Grant Distribution</h3>
-            <p>Represent grant vesting with a stream. Claimable amount is determined by schedule, leaving a perfect audit trail.</p>
-          </div>
-          <div className="use-case-card panel">
-            <Clock size={28} className="use-case-icon" />
-            <h3>Team Token Vesting</h3>
-            <p>Allocate team tokens with linear vesting based on start and end times. Tokens are securely locked until unlocked.</p>
-          </div>
+          {t.landing.useCases.map(([title, body], index) => {
+            const icons = [Layers, Coins, CheckCircle, Clock];
+            const Icon = icons[index];
+            return (
+              <motion.div
+                className="use-case-card panel stream-sweep-card"
+                key={title}
+                initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-80px" }}
+                transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: index * CARD_STAGGER }}
+              >
+                <Icon size={28} className="use-case-icon" aria-hidden="true" />
+                <h3>{title}</h3>
+                <p>{body}</p>
+              </motion.div>
+            );
+          })}
         </div>
-      </section>
+      </MotionSection>
 
-      {/* Audit Trail Section */}
-      <section className="landing-section">
+      <MotionSection className="landing-section journey-section">
         <div className="section-header">
-          <p className="eyebrow">Transparency</p>
-          <h2>On-chain Audit Trail.</h2>
-          <p className="muted">
-            Every action produces a verifiable transaction signature on Solana. Both senders and recipients can verify stream status anytime.
-          </p>
+          <p className="eyebrow">{t.landing.auditEyebrow}</p>
+          <h2>{t.landing.auditTitle}</h2>
+          <p className="muted">{t.landing.auditSubtitle}</p>
         </div>
 
-        <div className="audit-timeline panel">
-          <div className="timeline-item">
-            <div className="timeline-dot success"></div>
-            <div className="timeline-content">
-              <strong>Stream created & Tokens locked</strong>
-              <span>Transaction verified on Explorer</span>
-            </div>
-          </div>
-          <div className="timeline-item">
-            <div className="timeline-dot active"></div>
-            <div className="timeline-content">
-              <strong>Vesting in progress</strong>
-              <span>Tokens unlocking linearly</span>
-            </div>
-          </div>
-          <div className="timeline-item">
-            <div className="timeline-dot pending"></div>
-            <div className="timeline-content">
-              <strong>Recipient claimed</strong>
-              <span>Partial tokens claimed by recipient</span>
-            </div>
-          </div>
+        <div className="audit-timeline panel kinetic-timeline">
+          <motion.span
+            className="timeline-fill"
+            aria-hidden="true"
+            style={{ scaleY: reduceMotion ? 1 : timelineScale }}
+          />
+          {t.landing.timeline.map(([title, body], index) => (
+            <motion.div
+              className="timeline-item"
+              key={title}
+              initial={reduceMotion ? false : { opacity: 0, x: -14 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true, margin: "-80px" }}
+              transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: index * 0.08 }}
+            >
+              <div className={`timeline-dot ${index === 0 ? "success" : index === 1 ? "active" : "pending"}`} />
+              <div className="timeline-content">
+                <strong>{title}</strong>
+                <span>{body}</span>
+              </div>
+            </motion.div>
+          ))}
         </div>
-      </section>
+      </MotionSection>
 
-      {/* Final CTA Section */}
-      <section className="final-cta">
-        <h2>Ready to create a token stream?</h2>
-        <p className="muted">Create a stream or open the recipient claim page.</p>
+      <MotionSection className="final-cta">
+        <h2>{t.landing.finalTitle}</h2>
+        <p className="muted">{t.landing.finalSubtitle}</p>
         <div className="action-row justify-center">
           <Link className="button primary" href="/admin/create">
-            Create a Stream
+            {t.landing.create}
           </Link>
           <Link className="button secondary" href="/recipient">
-            Open Recipient Page
+            {t.landing.openRecipient}
           </Link>
         </div>
-      </section>
+      </MotionSection>
     </main>
   );
 }

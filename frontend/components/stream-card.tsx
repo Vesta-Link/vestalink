@@ -1,5 +1,6 @@
 import { ExternalLink } from "lucide-react";
 
+import { usePreferences } from "@/components/preferences-provider";
 import { StatusPill } from "@/components/status-pill";
 import {
   explorerUrl,
@@ -8,11 +9,11 @@ import {
   type StreamView
 } from "@/lib/vesting";
 
-function formatTimeRemaining(endTime: { toNumber: () => number }) {
+function formatTimeRemaining(endTime: { toNumber: () => number }, endedLabel: string) {
   const now = Math.floor(Date.now() / 1000);
   const end = endTime.toNumber();
   const diff = end - now;
-  if (diff <= 0) return "Ended";
+  if (diff <= 0) return endedLabel;
   const days = Math.floor(diff / 86_400);
   const hours = Math.floor((diff % 86_400) / 3_600);
   const minutes = Math.floor((diff % 3_600) / 60);
@@ -34,6 +35,7 @@ export function StreamCard({
   onCancel?: () => void;
   isCancelling?: boolean;
 }>) {
+  const { t } = usePreferences();
   const { account } = stream;
   const counterparty = mode === "admin" ? account.recipient : account.funder;
   const claimed = rawToDecimal(account.claimedAmount, stream.decimals);
@@ -51,10 +53,10 @@ export function StreamCard({
   const hasClaimable = claimableRaw > 0n;
 
   return (
-    <article className="stream-card" style={hasClaimable && mode === "recipient" ? { borderColor: 'var(--accent)', boxShadow: '0 0 10px rgba(16, 185, 129, 0.1)' } : {}}>
+    <article className="stream-card" style={hasClaimable && mode === "recipient" ? { borderColor: "var(--accent)", boxShadow: "var(--accent-glow)" } : {}}>
       <div className="stream-card-top">
         <div>
-          <p className="label">{mode === "admin" ? "Recipient" : "Funder"}</p>
+          <p className="label">{mode === "admin" ? t.streamCard.recipient : t.streamCard.funder}</p>
           <a
             className="address-link"
             href={explorerUrl(counterparty.toBase58())}
@@ -71,10 +73,10 @@ export function StreamCard({
       {/* Progress Visualization */}
       <div className="progress-section" style={{ margin: '16px 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 13 }}>
-          <span style={{ color: 'var(--muted)' }}>Progress</span>
+          <span style={{ color: 'var(--muted)' }}>{t.common.progress}</span>
           <span style={{ fontWeight: 600 }}>{percent.toFixed(2)}%</span>
         </div>
-        <div className="progress-track" aria-label={`${percent.toFixed(2)}% unlocked`} style={{ height: 8, background: 'var(--surface-hover)', borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
+        <div className="progress-track" aria-label={`${percent.toFixed(2)}% ${t.common.unlocked}`} style={{ height: 8, background: 'var(--surface-strong)', borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
           <span
             style={{
               display: 'block',
@@ -100,24 +102,24 @@ export function StreamCard({
 
       <div className="metric-grid">
         <div>
-          <span className="label">Total</span>
+          <span className="label">{t.common.total}</span>
           <strong>{total}</strong>
         </div>
         <div>
-          <span className="label">Unlocked</span>
+          <span className="label">{t.common.unlocked}</span>
           <strong>{rawToDecimal(stream.unlockedRaw, stream.decimals)}</strong>
         </div>
         <div>
-          <span className="label">Claimed</span>
+          <span className="label">{t.common.claimed}</span>
           <strong>{claimed}</strong>
         </div>
         <div>
-          <span className="label">Claimable</span>
+          <span className="label">{t.common.claimable}</span>
           <strong style={hasClaimable ? { color: 'var(--accent)' } : {}}>{claimable}</strong>
         </div>
         <div>
-          <span className="label">Remaining</span>
-          <strong>{formatTimeRemaining(account.endTime)}</strong>
+          <span className="label">{t.common.remaining}</span>
+          <strong>{formatTimeRemaining(account.endTime, t.streamCard.ended)}</strong>
         </div>
       </div>
 
@@ -136,7 +138,7 @@ export function StreamCard({
               disabled={isCancelling}
               onClick={onCancel}
             >
-              {isCancelling ? "Cancelling…" : "Cancel"}
+              {isCancelling ? t.streamCard.cancelling : t.streamCard.cancel}
             </button>
           )}
           {action}

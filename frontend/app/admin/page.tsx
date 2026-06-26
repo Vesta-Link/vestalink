@@ -5,6 +5,7 @@ import { RefreshCw, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
+import { usePreferences } from "@/components/preferences-provider";
 import { StreamCard } from "@/components/stream-card";
 import {
   PRIVY_CONFIGURED,
@@ -21,15 +22,15 @@ import {
 } from "@/lib/vesting";
 
 export default function AdminPage() {
+  const { t } = usePreferences();
+
   if (!PRIVY_CONFIGURED) {
     return (
       <main className="page-shell single-column">
         <section className="panel">
-          <p className="eyebrow">Admin</p>
-          <h1>Privy app ID required</h1>
-          <p className="muted">
-            Set NEXT_PUBLIC_PRIVY_APP_ID in frontend/.env.local to connect wallets and view streams.
-          </p>
+          <p className="eyebrow">{t.header.admin}</p>
+          <h1>{t.common.privyRequiredTitle}</h1>
+          <p className="muted">{t.admin.privyRequired}</p>
         </section>
       </main>
     );
@@ -39,6 +40,7 @@ export default function AdminPage() {
 }
 
 function AdminPageInner() {
+  const { t } = usePreferences();
   const connection = useMemo(() => getConnection(), []);
   const { wallet, publicKey } = useActiveSolanaWallet();
   const { signAndSendTransaction } = useSignAndSendTransaction();
@@ -74,7 +76,7 @@ function AdminPageInner() {
   async function runSignedTx(
     buildFn: () => Promise<{ bytes: Uint8Array; blockhash: string; lastValidBlockHeight: number }>
   ) {
-    if (!wallet || !publicKey) throw new Error("Connect a wallet first.");
+    if (!wallet || !publicKey) throw new Error(t.create.connectWallet);
     const prepared = await buildFn();
     const result = await signAndSendTransaction({
       transaction: prepared.bytes,
@@ -96,7 +98,7 @@ function AdminPageInner() {
   async function cancelStream(stream: StreamView) {
     setCancelConfirm(null);
     if (!wallet || !publicKey) {
-      setError("Connect a wallet first.");
+      setError(t.create.connectWallet);
       return;
     }
     setError("");
@@ -107,7 +109,7 @@ function AdminPageInner() {
       const signature = await runSignedTx(async () =>
         prepareUnsignedTransaction({ connection, transaction, feePayer: publicKey })
       );
-      setSuccess(`Stream cancelled. Tx: ${signature}`);
+      setSuccess(t.admin.cancelled.replace("{signature}", signature));
       await loadStreams();
     } catch (err) {
       setError(serializeTransactionError(err));
@@ -119,7 +121,7 @@ function AdminPageInner() {
   let streamListContent;
   if (isLoading) {
     streamListContent = (
-      <div className="skeleton-list" aria-label="Loading streams">
+      <div className="skeleton-list" aria-label={t.common.loading}>
         <span />
         <span />
         <span />
@@ -128,10 +130,10 @@ function AdminPageInner() {
   } else if (adminStreams.length === 0) {
     streamListContent = (
       <div className="empty-state">
-        <strong>No streams yet</strong>
-        <p>Create a stream from this wallet to track recipients here.</p>
+        <strong>{t.admin.emptyTitle}</strong>
+        <p>{t.admin.emptyText}</p>
         <Link href="/admin/create" className="button primary" style={{ marginTop: 16 }}>
-          <Plus size={16} /> Create Stream
+          <Plus size={16} aria-hidden="true" /> {t.admin.createStream}
         </Link>
       </div>
     );
@@ -165,16 +167,14 @@ function AdminPageInner() {
       {cancelConfirm && (
         <dialog open className="modal-backdrop" aria-labelledby="cancel-dialog-title">
           <div className="modal-box">
-            <h2 id="cancel-dialog-title">Cancel this stream?</h2>
-            <p>
-              Unvested tokens will be returned to your treasury account. This action cannot be undone.
-            </p>
+            <h2 id="cancel-dialog-title">{t.admin.cancelTitle}</h2>
+            <p>{t.admin.cancelText}</p>
             <div className="modal-actions">
               <button className="button secondary compact" type="button" onClick={() => setCancelConfirm(null)}>
-                Keep stream
+                {t.admin.keepStream}
               </button>
               <button className="button primary compact" type="button" onClick={() => cancelStream(cancelConfirm)}>
-                Yes, cancel stream
+                {t.admin.confirmCancel}
               </button>
             </div>
           </div>
@@ -184,21 +184,21 @@ function AdminPageInner() {
       <main className="page-shell single-column">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <div>
-            <p className="eyebrow">Dashboard</p>
-            <h1>Admin Dashboard</h1>
+            <p className="eyebrow">{t.admin.eyebrow}</p>
+            <h1>{t.admin.title}</h1>
           </div>
           <Link href="/admin/create" className="button primary">
-            <Plus size={16} /> Create Stream
+            <Plus size={16} aria-hidden="true" /> {t.admin.createStream}
           </Link>
         </div>
 
         <section className="panel dashboard-panel">
           <div className="section-heading">
             <div>
-              <h2>Streams you created</h2>
-              <p className="muted">Manage and monitor your outgoing token streams.</p>
+              <h2>{t.admin.sectionTitle}</h2>
+              <p className="muted">{t.admin.sectionSubtitle}</p>
             </div>
-            <button className="icon-button" type="button" onClick={loadStreams} aria-label="Refresh">
+            <button className="icon-button" type="button" onClick={loadStreams} aria-label={t.common.refresh}>
               <RefreshCw size={17} aria-hidden="true" />
             </button>
           </div>

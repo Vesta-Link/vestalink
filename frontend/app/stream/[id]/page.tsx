@@ -8,6 +8,7 @@ import Link from "next/link";
 
 import { usePrivy } from "@privy-io/react-auth";
 
+import { usePreferences } from "@/components/preferences-provider";
 import { StreamCard } from "@/components/stream-card";
 import {
   PRIVY_CONFIGURED,
@@ -25,6 +26,7 @@ import {
 } from "@/lib/vesting";
 
 export default function StreamDetailPage() {
+  const { t } = usePreferences();
   const params = useParams();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
 
@@ -32,12 +34,9 @@ export default function StreamDetailPage() {
     return (
       <main className="page-shell single-column">
         <section className="panel">
-          <p className="eyebrow">Stream Detail</p>
-          <h1>Privy app ID required</h1>
-          <p className="muted">
-            Set NEXT_PUBLIC_PRIVY_APP_ID in frontend/.env.local to connect wallets and claim vested
-            tokens.
-          </p>
+          <p className="eyebrow">{t.stream.detailEyebrow}</p>
+          <h1>{t.common.privyRequiredTitle}</h1>
+          <p className="muted">{t.stream.privyRequired}</p>
         </section>
       </main>
     );
@@ -47,8 +46,8 @@ export default function StreamDetailPage() {
     return (
       <main className="page-shell single-column">
         <section className="panel">
-          <h1>Invalid Stream Link</h1>
-          <p className="muted">No stream ID was provided in the URL.</p>
+          <h1>{t.stream.invalidTitle}</h1>
+          <p className="muted">{t.stream.invalidText}</p>
         </section>
       </main>
     );
@@ -58,6 +57,7 @@ export default function StreamDetailPage() {
 }
 
 function StreamDetailPageInner({ id }: Readonly<{ id: string }>) {
+  const { t } = usePreferences();
   const connection = useMemo(() => getConnection(), []);
   const { wallet, publicKey } = useActiveSolanaWallet();
   const { signAndSendTransaction } = useSignAndSendTransaction();
@@ -77,7 +77,7 @@ function StreamDetailPageInner({ id }: Readonly<{ id: string }>) {
       try {
         const data = await fetchStream(connection, id);
         if (active) {
-          if (!data) throw new Error("Stream not found or invalid ID.");
+          if (!data) throw new Error(t.stream.notFoundError);
           setStream(data);
         }
       } catch (err) {
@@ -88,12 +88,12 @@ function StreamDetailPageInner({ id }: Readonly<{ id: string }>) {
     }
     void load();
     return () => { active = false; };
-  }, [connection, id]);
+  }, [connection, id, t.stream.notFoundError]);
 
   async function claim() {
     if (!stream) return;
     if (!wallet || !publicKey) {
-      setError("Connect the recipient wallet first.");
+      setError(t.recipient.connectFirst);
       return;
     }
 
@@ -125,7 +125,7 @@ function StreamDetailPageInner({ id }: Readonly<{ id: string }>) {
         },
         "confirmed"
       );
-      setSuccess(`Claimed ${rawToDecimal(stream.claimableRaw, stream.decimals)} tokens.`);
+      setSuccess(t.recipient.claimed.replace("{amount}", rawToDecimal(stream.claimableRaw, stream.decimals)));
 
       // Reload stream data after claim
       const updatedStream = await fetchStream(connection, id);
@@ -143,7 +143,7 @@ function StreamDetailPageInner({ id }: Readonly<{ id: string }>) {
   let streamContent;
   if (loading) {
     streamContent = (
-      <div className="skeleton-list" aria-label="Loading stream">
+      <div className="skeleton-list" aria-label={t.common.loading}>
         <span />
       </div>
     );
@@ -170,8 +170,8 @@ function StreamDetailPageInner({ id }: Readonly<{ id: string }>) {
   } else {
     streamContent = (
       <div className="empty-state">
-        <strong>Stream Not Found</strong>
-        <p>Make sure you have the correct link.</p>
+        <strong>{t.stream.notFoundTitle}</strong>
+        <p>{t.stream.notFoundText}</p>
       </div>
     );
   }
@@ -181,11 +181,9 @@ function StreamDetailPageInner({ id }: Readonly<{ id: string }>) {
       <section className="panel dashboard-panel">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Claim Tokens</p>
-            <h1>Vesting Stream</h1>
-            <p className="muted">
-              Connect your wallet to claim unlocked tokens from this stream.
-            </p>
+            <p className="eyebrow">{t.stream.eyebrow}</p>
+            <h1>{t.stream.title}</h1>
+            <p className="muted">{t.stream.subtitle}</p>
           </div>
         </div>
 
@@ -197,7 +195,7 @@ function StreamDetailPageInner({ id }: Readonly<{ id: string }>) {
         {stream && authenticated && isRecipient && (
           <div style={{ marginTop: 24, textAlign: 'center' }}>
             <Link href="/recipient" className="button secondary">
-              View All Your Streams
+              {t.stream.viewAll}
             </Link>
           </div>
         )}
@@ -223,17 +221,19 @@ function StreamAction({
   claiming: boolean;
   hasVault: boolean;
 }>) {
+  const { t } = usePreferences();
+
   if (!authenticated) {
     return (
       <button className="button primary compact" type="button" onClick={login}>
-        <Wallet size={14} /> Connect Wallet
+        <Wallet size={14} aria-hidden="true" /> {t.common.connectWallet}
       </button>
     );
   }
   if (!isRecipient) {
     return (
       <span className="hint-inline" style={{ color: 'var(--muted)', fontSize: 13 }}>
-        Not recipient wallet
+        {t.stream.notRecipient}
       </span>
     );
   }
@@ -244,7 +244,7 @@ function StreamAction({
       disabled={!hasClaimable || claiming || !hasVault}
       onClick={claim}
     >
-      {claiming ? "Claiming..." : "Claim Tokens"}
+      {claiming ? t.recipient.claiming : t.stream.claimTokens}
     </button>
   );
 }
