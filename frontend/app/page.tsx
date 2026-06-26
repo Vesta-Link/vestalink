@@ -3,6 +3,7 @@
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { ArrowRight, CheckCircle, Clock, Coins, Database, Layers } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 
 import { usePreferences } from "@/components/preferences-provider";
 
@@ -73,11 +74,52 @@ function AnimatedWords({ text }: Readonly<{ text: string }>) {
 export default function Home() {
   const { t } = usePreferences();
   const reduceMotion = useReducedMotion();
+  const timelineRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll();
   const pathScale = useTransform(scrollYProgress, [0.03, 0.88], [0, 1]);
   const tokenY = useTransform(scrollYProgress, [0.02, 0.9], ["6vh", "82vh"]);
   const tokenOpacity = useTransform(scrollYProgress, [0, 0.08, 0.92, 1], [0, 1, 1, 0]);
   const timelineScale = useTransform(scrollYProgress, [0.62, 0.84], [0, 1]);
+
+  useEffect(() => {
+    const timeline = timelineRef.current;
+    if (!timeline) return undefined;
+
+    let frameId: number | null = null;
+
+    function syncTimelineFill() {
+      if (!timeline) return;
+      const dots = timeline.querySelectorAll<HTMLElement>(".timeline-dot");
+      const firstDot = dots[0];
+      const lastDot = dots[dots.length - 1];
+      if (!firstDot || !lastDot) return;
+
+      const timelineRect = timeline.getBoundingClientRect();
+      const firstRect = firstDot.getBoundingClientRect();
+      const lastRect = lastDot.getBoundingClientRect();
+      const top = firstRect.top + firstRect.height / 2 - timelineRect.top;
+      const bottom = lastRect.top + lastRect.height / 2 - timelineRect.top;
+
+      timeline.style.setProperty("--timeline-fill-top", `${top}px`);
+      timeline.style.setProperty("--timeline-fill-height", `${Math.max(bottom - top, 0)}px`);
+    }
+
+    function scheduleSync() {
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(syncTimelineFill);
+    }
+
+    const resizeObserver = new ResizeObserver(scheduleSync);
+    resizeObserver.observe(timeline);
+    window.addEventListener("resize", scheduleSync);
+    scheduleSync();
+
+    return () => {
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", scheduleSync);
+    };
+  }, [t.landing.timeline]);
 
   return (
     <main className="page-shell landing-playground">
@@ -186,7 +228,7 @@ export default function Home() {
           <p className="muted">{t.landing.auditSubtitle}</p>
         </div>
 
-        <div className="audit-timeline panel kinetic-timeline">
+        <div className="audit-timeline panel kinetic-timeline" ref={timelineRef}>
           <motion.span
             className="timeline-fill"
             aria-hidden="true"

@@ -13,7 +13,8 @@ export function SiteHeader() {
   return (
     <header className="site-header">
       <Link href="/" className="brand" aria-label="Vestalink home">
-        Vestalink
+        <img className="brand-logo" src="/assets/vestalink-logo.png" alt="" aria-hidden="true" />
+        <span>Vestalink</span>
       </Link>
       <nav className="nav-links" aria-label="Primary navigation">
         <Link href="/admin">{t.header.admin}</Link>

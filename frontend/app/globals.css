@@ -106,9 +106,21 @@ textarea:focus-visible {
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   font-size: 19px;
   font-weight: 650;
   letter-spacing: 0;
+}
+
+.brand-logo {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #ffffff;
+  object-fit: cover;
 }
 
 .nav-links {
@@ -1513,11 +1525,11 @@ textarea::placeholder {
 
 .timeline-fill {
   position: absolute;
-  left: 45px;
-  top: 64px;
-  bottom: 64px;
+  left: 46px;
+  top: var(--timeline-fill-top, 51px);
   z-index: 1;
   width: 2px;
+  height: var(--timeline-fill-height, calc(100% - 122px));
   border-radius: 999px;
   background: linear-gradient(180deg, var(--accent), var(--foreground));
   transform-origin: top;
@@ -1543,8 +1555,8 @@ textarea::placeholder {
   content: "";
   position: absolute;
   left: 6px;
-  top: 24px;
-  bottom: -4px;
+  top: 11px;
+  bottom: -11px;
   width: 2px;
   background: var(--border);
 }
