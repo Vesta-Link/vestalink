@@ -17,14 +17,17 @@ const jetBrainsMono = JetBrains_Mono({
   variable: "--font-geist-mono"
 });
 
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+
 export const metadata: Metadata = {
   title: "Vestalink",
   description: "Simple Solana token vesting streams for teams and recipients.",
-  metadataBase: new URL("https://vestalink.vercel.app"),
+  metadataBase: new URL(siteUrl),
   openGraph: {
     title: "Vestalink",
     description: "Simple Solana token vesting streams for teams and recipients.",
-    url: "https://vestalink.vercel.app",
     siteName: "Vestalink",
     images: [
       {
