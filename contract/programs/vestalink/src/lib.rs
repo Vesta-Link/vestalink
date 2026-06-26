@@ -16,6 +16,14 @@ declare_id!("8q5LLVTGNUS16AV4xj6KPLet1M7y4xpa8XjxV7cHH98r");
 pub mod vestalink {
     use super::*;
 
+    pub fn initialize_config(ctx: Context<InitializeConfig>) -> Result<()> {
+        initialize_config_impl(ctx)
+    }
+
+    pub fn update_admin(ctx: Context<UpdateAdmin>, new_admin: Pubkey) -> Result<()> {
+        update_admin_impl(ctx, new_admin)
+    }
+
     pub fn create_stream(
         ctx: Context<CreateVestingSchedule>,
         params: CreateVestingParams,
