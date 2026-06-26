@@ -36,6 +36,8 @@ pub enum VestingError {
     StreamFullyVested,
     #[msg("Stream has expired")]
     StreamExpired,
+    #[msg("Unauthorized access")]
+    Unauthorized,
 }
 
 #[cfg(test)]

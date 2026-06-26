@@ -12,6 +12,10 @@ import {
 import { Vestalink } from "../target/types/vestalink";
 import { nowSeconds } from "./utils";
 
+const BPF_LOADER_UPGRADEABLE = new anchor.web3.PublicKey(
+  "BPFLoaderUpgradeab1e11111111111111111111111"
+);
+
 export class VestalinkFixture {
   provider: anchor.AnchorProvider;
   program: Program<Vestalink>;
@@ -22,6 +26,7 @@ export class VestalinkFixture {
   faucetMint!: anchor.web3.PublicKey;
   funderTokenAccount!: anchor.web3.PublicKey;
   recipient!: anchor.web3.Keypair;
+  globalConfigPda!: anchor.web3.PublicKey;
 
   constructor() {
     this.provider = anchor.AnchorProvider.env();
@@ -70,6 +75,40 @@ export class VestalinkFixture {
       100_000_000_000
     );
     this.recipient = anchor.web3.Keypair.generate();
+
+    this.globalConfigPda = anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("global_config")],
+      this.program.programId
+    )[0];
+
+    try {
+      await this.program.account.globalConfig.fetch(this.globalConfigPda);
+    } catch (e) {
+      console.log("Global config not initialized, initializing...", (e as Error).message);
+      const [programDataAddress] = anchor.web3.PublicKey.findProgramAddressSync(
+        [this.program.programId.toBuffer()],
+        BPF_LOADER_UPGRADEABLE
+      );
+      
+      const accInfo = await this.provider.connection.getAccountInfo(programDataAddress);
+      if (accInfo) {
+        const offset = 13;
+        const upgradeAuth = new anchor.web3.PublicKey(accInfo.data.subarray(offset, offset + 32));
+        console.log("Wallet:", this.wallet.publicKey.toBase58());
+        console.log("Upgrade Auth:", upgradeAuth.toBase58());
+      }
+      
+      await this.program.methods
+        .initializeConfig()
+        .accountsPartial({
+          globalConfig: this.globalConfigPda,
+          admin: this.wallet.publicKey,
+          programData: programDataAddress,
+          program: this.program.programId,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .rpc();
+    }
   }
 
   derivePda(
@@ -165,6 +204,15 @@ export class VestalinkFixture {
       milestoneCount,
       nonce,
     };
+    
+    let globalConfigInfo = null;
+    try {
+      globalConfigInfo = await this.program.account.globalConfig.fetch(this.globalConfigPda);
+    } catch (e) {
+      console.log("Global config not initialized yet.", (e as Error).message);
+    }
+    const adminAddress = globalConfigInfo ? globalConfigInfo.admin : this.provider.wallet.publicKey;
+
     const builder =
       params.method === "createVestingSchedule"
         ? this.program.methods.createVestingSchedule(args)
@@ -176,8 +224,13 @@ export class VestalinkFixture {
         funder: this.wallet.payer.publicKey,
         recipient: streamRecipient.publicKey,
         funderTokenAccount: params.funderTokenAcct ?? this.funderTokenAccount,
+        mint: this.mint,
         vestingTokenAccount,
+        globalConfig: this.globalConfigPda,
+        adminAddress: adminAddress,
+        adminTokenAccount: getAssociatedTokenAddressSync(this.mint, adminAddress, true),
         tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
       })
       .preInstructions(preInstructions)

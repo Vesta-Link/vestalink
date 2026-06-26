@@ -11,6 +11,15 @@ pub enum VestingType {
 }
 
 #[account]
+pub struct GlobalConfig {
+    pub admin: Pubkey,
+}
+
+impl GlobalConfig {
+    pub const SIZE: usize = 8 + 32;
+}
+
+#[account]
 pub struct VestingState {
     pub recipient: Pubkey,
     pub funder: Pubkey,

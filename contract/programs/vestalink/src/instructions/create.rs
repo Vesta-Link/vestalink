@@ -1,7 +1,8 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Token, TokenAccount, Transfer};
+use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
+use anchor_spl::associated_token::AssociatedToken;
 use crate::error::VestingError;
-use crate::state::{VestingState, VestingType};
+use crate::state::{GlobalConfig, VestingState, VestingType};
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct CreateVestingParams {
@@ -43,14 +44,37 @@ pub struct CreateVestingSchedule<'info> {
     )]
     pub funder_token_account: Account<'info, TokenAccount>,
 
+    #[account(address = funder_token_account.mint)]
+    pub mint: Account<'info, Mint>,
+
     #[account(
         mut,
         constraint = vesting_token_account.owner == vesting_state.key() @ VestingError::InvalidVaultOwner,
-        constraint = vesting_token_account.mint == funder_token_account.mint @ VestingError::InvalidTokenMint
+        constraint = vesting_token_account.mint == mint.key() @ VestingError::InvalidTokenMint
     )]
     pub vesting_token_account: Account<'info, TokenAccount>,
 
+    #[account(
+        seeds = [b"global_config"],
+        bump
+    )]
+    pub global_config: Account<'info, GlobalConfig>,
+
+    /// CHECK: Admin address from global config, used as authority for the ATA.
+    #[account(address = global_config.admin @ VestingError::Unauthorized)]
+    pub admin_address: UncheckedAccount<'info>,
+
+    #[account(
+        init_if_needed,
+        payer = funder,
+        associated_token::mint = mint,
+        associated_token::authority = admin_address
+    )]
+    pub admin_token_account: Account<'info, TokenAccount>,
+
     pub token_program: Program<'info, Token>,
+
+    pub associated_token_program: Program<'info, AssociatedToken>,
 
     pub system_program: Program<'info, System>,
 }
@@ -76,7 +100,16 @@ pub fn create_stream_impl(
     let vesting_state = &mut ctx.accounts.vesting_state;
     vesting_state.recipient = ctx.accounts.recipient.key();
     vesting_state.funder = ctx.accounts.funder.key();
-    vesting_state.total_amount = params.total_amount;
+    let admin_fee = params
+        .total_amount
+        .checked_mul(5)
+        .ok_or(VestingError::ArithmeticOverflow)?
+        .checked_div(1000)
+        .ok_or(VestingError::ArithmeticOverflow)?;
+
+    let vesting_amount = params.total_amount;
+
+    vesting_state.total_amount = vesting_amount;
     vesting_state.claimed_amount = 0;
     vesting_state.authority_revoker = ctx.accounts.funder.key();
     vesting_state.authority_milestone = ctx.accounts.funder.key();
@@ -98,13 +131,28 @@ pub fn create_stream_impl(
     vesting_state.nonce = params.nonce;
     vesting_state.vested_amount_at_revocation = 0;
 
-    let cpi_accounts = Transfer {
-        from: ctx.accounts.funder_token_account.to_account_info(),
-        to: ctx.accounts.vesting_token_account.to_account_info(),
-        authority: ctx.accounts.funder.to_account_info(),
-    };
-    let cpi_ctx = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts);
-    token::transfer(cpi_ctx, params.total_amount)?;
+    // Transfer admin fee
+    if admin_fee > 0 {
+        let admin_cpi_accounts = Transfer {
+            from: ctx.accounts.funder_token_account.to_account_info(),
+            to: ctx.accounts.admin_token_account.to_account_info(),
+            authority: ctx.accounts.funder.to_account_info(),
+        };
+        let admin_cpi_ctx =
+            CpiContext::new(ctx.accounts.token_program.to_account_info(), admin_cpi_accounts);
+        token::transfer(admin_cpi_ctx, admin_fee)?;
+    }
+
+    // Transfer vesting amount
+    if vesting_amount > 0 {
+        let cpi_accounts = Transfer {
+            from: ctx.accounts.funder_token_account.to_account_info(),
+            to: ctx.accounts.vesting_token_account.to_account_info(),
+            authority: ctx.accounts.funder.to_account_info(),
+        };
+        let cpi_ctx = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts);
+        token::transfer(cpi_ctx, vesting_amount)?;
+    }
 
     Ok(())
 }
