@@ -19,7 +19,29 @@ const jetBrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "Vestalink",
-  description: "Simple Solana token vesting streams for teams and recipients."
+  description: "Simple Solana token vesting streams for teams and recipients.",
+  metadataBase: new URL("https://vestalink.vercel.app"),
+  openGraph: {
+    title: "Vestalink",
+    description: "Simple Solana token vesting streams for teams and recipients.",
+    url: "https://vestalink.vercel.app",
+    siteName: "Vestalink",
+    images: [
+      {
+        url: "/assets/vestalink-og.png",
+        width: 1536,
+        height: 1024,
+        alt: "Vestalink token streaming preview"
+      }
+    ],
+    type: "website"
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Vestalink",
+    description: "Simple Solana token vesting streams for teams and recipients.",
+    images: ["/assets/vestalink-og.png"]
+  }
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
