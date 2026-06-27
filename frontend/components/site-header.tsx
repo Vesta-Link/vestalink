@@ -111,9 +111,9 @@ export function SiteHeader() {
 
   return (
     <header className="site-header">
-      <Link href="/" className="brand" aria-label="Vestalink home">
+      <Link href="/" className="brand" aria-label="VestaLink home">
         <img className="brand-logo" src="/assets/vestalink-logo.png" alt="" aria-hidden="true" />
-        <span>Vestalink</span>
+        <span>VestaLink</span>
       </Link>
       <nav className="nav-links" aria-label="Primary navigation">
         <Link href="/admin">{t.header.admin}</Link>

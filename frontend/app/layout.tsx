@@ -22,26 +22,26 @@ const siteUrl =
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
 export const metadata: Metadata = {
-  title: "Vestalink",
+  title: "VestaLink",
   description: "Simple Solana token vesting streams for teams and recipients.",
   metadataBase: new URL(siteUrl),
   openGraph: {
-    title: "Vestalink",
+    title: "VestaLink",
     description: "Simple Solana token vesting streams for teams and recipients.",
-    siteName: "Vestalink",
+    siteName: "VestaLink",
     images: [
       {
         url: "/assets/vestalink-og.png",
         width: 1536,
         height: 1024,
-        alt: "Vestalink token streaming preview"
+        alt: "VestaLink token streaming preview"
       }
     ],
     type: "website"
   },
   twitter: {
     card: "summary_large_image",
-    title: "Vestalink",
+    title: "VestaLink",
     description: "Simple Solana token vesting streams for teams and recipients.",
     images: ["/assets/vestalink-og.png"]
   }
