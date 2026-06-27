@@ -66,7 +66,8 @@ export const dictionaries = {
       noTokenAccount: "Unable to find token account for this wallet. Recipient may need to initialize it.",
       invalidRecipient: "Invalid recipient wallet address.",
       internalError: "Something went wrong while sending the transaction. Please try again or share this error with the team.",
-      txFailed: "Transaction failed. Please try again."
+      txFailed: "Transaction failed. Please try again.",
+      groupHasMaxMilestone: "Cannot set milestone for all: some streams have already reached their maximum milestones."
     },
     landing: {
       eyebrow: "Solana token streams",
@@ -241,7 +242,8 @@ export const dictionaries = {
       cancel: "Cancel",
       cancelling: "Cancelling...",
       setMilestone: "Set Milestone",
-      settingMilestone: "Setting..."
+      settingMilestone: "Setting...",
+      viewStream: "View Stream"
     }
   },
   id: {
@@ -301,7 +303,8 @@ export const dictionaries = {
       noTokenAccount: "Nggak bisa nemuin token account buat wallet ini. Penerima mungkin perlu inisialisasi.",
       invalidRecipient: "Alamat wallet penerima nggak valid.",
       internalError: "Ada yang salah pas ngirim transaksi. Coba lagi atau lapor ke tim kami.",
-      txFailed: "Transaksi gagal. Coba lagi ya."
+      txFailed: "Transaksi gagal. Coba lagi ya.",
+      groupHasMaxMilestone: "Tidak bisa set milestone untuk semua: ada stream individu yang sudah mencapai batas maksimal."
     },
     landing: {
       eyebrow: "Token stream di Solana",
@@ -476,7 +479,8 @@ export const dictionaries = {
       cancel: "Batalkan",
       cancelling: "Membatalkan...",
       setMilestone: "Buka Milestone",
-      settingMilestone: "Tunggu..."
+      settingMilestone: "Tunggu...",
+      viewStream: "Lihat Stream"
     }
   },
   "zh-CN": {
@@ -536,7 +540,8 @@ export const dictionaries = {
       noTokenAccount: "找不到该钱包的代币账户。接收方可能需要进行初始化。",
       invalidRecipient: "无效的接收方钱包地址。",
       internalError: "发送交易时出错。请重试或向团队报告此错误。",
-      txFailed: "交易失败。请重试。"
+      txFailed: "交易失败。请重试。",
+      groupHasMaxMilestone: "无法全部设置里程碑：部分个人流已达到最大里程碑限制。"
     },
     landing: {
       eyebrow: "Solana 代币流",
@@ -711,7 +716,8 @@ export const dictionaries = {
       cancel: "取消",
       cancelling: "取消中...",
       setMilestone: "解锁里程碑",
-      settingMilestone: "设置中..."
+      settingMilestone: "设置中...",
+      viewStream: "查看流"
     }
   }
 } as const;

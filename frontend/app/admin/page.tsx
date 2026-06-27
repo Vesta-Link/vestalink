@@ -227,7 +227,7 @@ function AdminPageInner() {
           
           return (
             <div key={firstStream.publicKey.toBase58()} className="stream-group">
-              <h3 style={{ marginBottom: '16px', fontSize: '1.1em', fontWeight: 600, paddingBottom: '8px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ marginBottom: '16px', fontSize: '0.95em', fontWeight: 600, paddingBottom: '8px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   {groupTitle}
                   {canUnlockGroup && (
@@ -235,7 +235,18 @@ function AdminPageInner() {
                       className="button primary compact"
                       type="button"
                       disabled={isSettingGroupMilestone}
-                      onClick={() => unlockGroupMilestone(firstStream.publicKey.toBase58(), unlockableStreams)}
+                      onClick={() => {
+                        const hasMaxMilestone = group.some((s) => {
+                          const isMilestone = typeof s.account.vestingType === 'object' && s.account.vestingType !== null && 'milestone' in s.account.vestingType;
+                          return isMilestone && s.account.milestonesReached >= s.account.milestoneCount;
+                        });
+                        if (hasMaxMilestone) {
+                          setError(t.errors.groupHasMaxMilestone || "Cannot set milestone for all: some streams have already reached their maximum milestones.");
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                          return;
+                        }
+                        unlockGroupMilestone(firstStream.publicKey.toBase58(), unlockableStreams);
+                      }}
                     >
                       {isSettingGroupMilestone ? t.streamCard.settingMilestone : t.admin.unlockGroup}
                     </button>
