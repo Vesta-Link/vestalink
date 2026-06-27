@@ -22,6 +22,11 @@ function formatTimeRemaining(endTime: { toNumber: () => number }, endedLabel: st
   return `${minutes}${units.m}`;
 }
 
+function shortAddress(address: string) {
+  if (address.length <= 12) return address;
+  return `${address.slice(0, 6)}...${address.slice(-6)}`;
+}
+
 export function StreamCard({
   stream,
   mode,
@@ -68,16 +73,23 @@ export function StreamCard({
   return (
     <article className="stream-card" style={hasClaimable && mode === "recipient" ? { borderColor: "var(--accent)", boxShadow: "var(--accent-glow)" } : {}}>
       <div className="stream-card-top">
-        <div>
+        <div style={{ minWidth: 0, maxWidth: '100%' }}>
           <p className="label">{mode === "admin" ? t.streamCard.recipient : t.streamCard.funder}</p>
           <a
             className="address-link"
             href={explorerUrl(counterparty.toBase58())}
             target="_blank"
             rel="noreferrer"
+            style={{ maxWidth: '100%' }}
+            title={counterparty.toBase58()}
           >
-            {counterparty.toBase58()}
-            <ExternalLink size={14} aria-hidden="true" />
+            <span className="address-full">
+              {counterparty.toBase58()}
+            </span>
+            <span className="address-short">
+              {shortAddress(counterparty.toBase58())}
+            </span>
+            <ExternalLink size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
           </a>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>

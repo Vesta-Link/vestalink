@@ -202,12 +202,14 @@ textarea:focus-visible {
   align-items: center;
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 0 10px;
+  padding: 4px 10px;
   background: var(--background);
   color: var(--muted);
   font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
   font-size: 12px;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
+  max-width: 100%;
 }
 
 .page-shell {
@@ -632,6 +634,7 @@ textarea::placeholder {
 .stream-card {
   display: grid;
   gap: 16px;
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 18px;
@@ -674,6 +677,11 @@ textarea::placeholder {
   margin-top: 4px;
   font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
   font-size: 14px;
+  max-width: 100%;
+}
+
+.address-short {
+  display: none;
 }
 
 .status-pill.active {
@@ -1744,6 +1752,18 @@ textarea::placeholder {
   .token-select-button > svg,
   .token-row .network-pill {
     display: none;
+  }
+
+  .address-short {
+    display: none;
+  }
+
+  .address-full {
+    display: none;
+  }
+  
+  .address-short {
+    display: inline;
   }
 }
 

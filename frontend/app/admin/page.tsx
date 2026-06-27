@@ -227,8 +227,8 @@ function AdminPageInner() {
           
           return (
             <div key={firstStream.publicKey.toBase58()} className="stream-group">
-              <h3 style={{ marginBottom: '16px', fontSize: '0.95em', fontWeight: 600, paddingBottom: '8px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <h3 style={{ marginBottom: '16px', fontSize: '0.95em', fontWeight: 600, paddingBottom: '8px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                   {groupTitle}
                   {canUnlockGroup && (
                     <button
@@ -331,7 +331,7 @@ function AdminPageInner() {
       )}
 
       <main className="page-shell single-column">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <p className="eyebrow">{t.admin.eyebrow}</p>
             <h1>{t.admin.title}</h1>
