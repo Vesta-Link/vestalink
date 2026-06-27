@@ -61,7 +61,7 @@ function RecipientPageInner() {
     try {
       setStreams(await fetchStreams(connection));
     } catch (err) {
-      setError(serializeTransactionError(err));
+      setError(serializeTransactionError(err, t.errors));
     } finally {
       setLoading(false);
     }
@@ -108,7 +108,7 @@ function RecipientPageInner() {
       setSuccess(t.recipient.claimed.replace("{amount}", rawToDecimal(stream.claimableRaw, stream.decimals)));
       await loadStreams();
     } catch (err) {
-      setError(serializeTransactionError(err));
+      setError(serializeTransactionError(err, t.errors));
     } finally {
       setClaiming("");
     }
@@ -131,18 +131,22 @@ function RecipientPageInner() {
         {error && <p className="message error">{error}</p>}
         {success && <p className="message success">{success}</p>}
 
-        {loading ? (
+        {loading && (
           <div className="skeleton-list" aria-label={t.common.loading}>
             <span />
             <span />
             <span />
           </div>
-        ) : recipientStreams.length === 0 ? (
+        )}
+
+        {!loading && recipientStreams.length === 0 && (
           <div className="empty-state">
             <strong>{t.recipient.emptyTitle}</strong>
             <p>{t.recipient.emptyText}</p>
           </div>
-        ) : (
+        )}
+
+        {!loading && recipientStreams.length > 0 && (
           <div className="stream-list">
             {recipientStreams.map((stream) => {
               const isClaiming = claiming === stream.publicKey.toBase58();

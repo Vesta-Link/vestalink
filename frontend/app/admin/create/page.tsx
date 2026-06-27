@@ -116,7 +116,9 @@ function CreateStreamPageInner() {
   const [rows, setRows] = useState("");
   const [start, setStart] = useState(defaultDate(5));
   const [end, setEnd] = useState(defaultDate(60 * 24 * 30));
+  const [streamType, setStreamType] = useState<"linear" | "cliff" | "milestone">("linear");
   const [cliff, setCliff] = useState("");
+  const [milestoneCount, setMilestoneCount] = useState("5");
   const [txState, setTxState] = useState<TxState>("idle");
   const [isRequestingVesta, setIsRequestingVesta] = useState(false);
   const [error, setError] = useState("");
@@ -148,6 +150,20 @@ function CreateStreamPageInner() {
       return { ...row, status: errorMessage ? "invalid" as const : "valid" as const, error: errorMessage };
     });
   }, [manualRows, t.create.duplicateWallet, t.create.invalidAmount, t.create.invalidWallet, t.create.missingFields]);
+
+  const subtotalAmount = useMemo(() => {
+    let total = 0;
+    const activeRows = formTab === "manual" ? manualValidation : parsedCsvRows;
+    activeRows.forEach((row) => {
+      if (row.status === "valid") {
+        total += Number(row.amount.replaceAll(",", ""));
+      }
+    });
+    return total;
+  }, [formTab, manualValidation, parsedCsvRows]);
+
+  const adminFeeAmount = subtotalAmount * 0.005;
+  const totalDeductedAmount = subtotalAmount + adminFeeAmount;
 
   function txStateLabel(state: TxState, action: string) {
     if (state === "building") return t.create.building;
@@ -209,7 +225,7 @@ function CreateStreamPageInner() {
         finalRows = parsedCsvRows.map((row) => ({ wallet: row.wallet, amount: row.amount }));
       }
 
-      const cliffTime = cliff ? parseLocalDateTime(cliff, t.create.cliff) : undefined;
+      const cliffTime = streamType === "cliff" && cliff ? parseLocalDateTime(cliff, t.create.cliff) : undefined;
       const { transaction, streams: newStreamAccounts } = await buildCreateStreamTransaction({
         connection,
         wallet: { publicKey },
@@ -217,7 +233,9 @@ function CreateStreamPageInner() {
         rows: finalRows,
         startTime: parseLocalDateTime(start, t.create.start),
         endTime: parseLocalDateTime(end, t.create.end),
-        cliffTime
+        vestingType: streamType,
+        cliffTime,
+        milestoneCount: streamType === "milestone" ? Number.parseInt(milestoneCount, 10) : undefined
       });
 
       const signature = await runSignedTx(async () =>
@@ -230,9 +248,9 @@ function CreateStreamPageInner() {
       if (formTab === "manual") setManualRows([createRecipientRow()]);
       else setRows("");
       setCliff("");
-    } catch (err) {
+    } catch (err: unknown) {
       setTxState("error");
-      setError(serializeTransactionError(err));
+      setError(serializeTransactionError(err, t.errors));
       setTimeout(() => setStep("review"), 3000);
     }
   }
@@ -271,7 +289,7 @@ function CreateStreamPageInner() {
       setFaucetToast({
         type: "error",
         title: t.create.requestFailed,
-        message: serializeTransactionError(err),
+        message: serializeTransactionError(err, t.errors),
         signature: signature || undefined
       });
     } finally {
@@ -449,7 +467,7 @@ function CreateStreamPageInner() {
                             id={`recipient-${row.id}`}
                             value={row.wallet}
                             onChange={(event) => updateManualRow(row.id, "wallet", event.target.value)}
-                            placeholder="Solana wallet address"
+                            placeholder={t.create.walletPlaceholder}
                             spellCheck={false}
                             aria-invalid={row.wallet && row.status === "invalid" ? "true" : undefined}
                           />
@@ -462,7 +480,7 @@ function CreateStreamPageInner() {
                             inputMode="decimal"
                             value={row.amount}
                             onChange={(event) => updateManualRow(row.id, "amount", event.target.value)}
-                            placeholder="1000"
+                            placeholder={t.create.amountPlaceholder}
                             aria-invalid={row.amount && row.status === "invalid" ? "true" : undefined}
                           />
                         </div>
@@ -546,6 +564,25 @@ function CreateStreamPageInner() {
             {step === "schedule" && (
               <div className="wizard-step">
                 <h3>{t.create.configureSchedule}</h3>
+
+                <div className="field">
+                  <div style={{ marginBottom: '8px', fontWeight: 500, fontSize: '0.9em', color: 'var(--text)' }}>{t.create.streamType}</div>
+                  <div className="radio-group" style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                      <input type="radio" name="streamType" value="linear" checked={streamType === "linear"} onChange={() => setStreamType("linear")} />
+                      {" "}{t.common.linear}
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                      <input type="radio" name="streamType" value="cliff" checked={streamType === "cliff"} onChange={() => setStreamType("cliff")} />
+                      {" "}{t.common.cliff}
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                      <input type="radio" name="streamType" value="milestone" checked={streamType === "milestone"} onChange={() => setStreamType("milestone")} />
+                      {" "}{t.common.milestone}
+                    </label>
+                  </div>
+                </div>
+
                 <div className="field-grid">
                   <div className="field">
                     <label htmlFor="start">{t.create.start}</label>
@@ -556,11 +593,20 @@ function CreateStreamPageInner() {
                     <input id="end" type="datetime-local" value={end} onChange={(event) => setEnd(event.target.value)} required />
                   </div>
                 </div>
-                <div className="field">
-                  <label htmlFor="cliff">{t.create.cliff} <span className="hint-inline">({t.create.optional})</span></label>
-                  <input id="cliff" type="datetime-local" value={cliff} onChange={(event) => setCliff(event.target.value)} min={start} max={end} />
-                  <p className="hint">{t.create.cliffHint}</p>
-                </div>
+                {streamType === "cliff" && (
+                  <div className="field">
+                    <label htmlFor="cliff">{t.create.cliff}</label>
+                    <input id="cliff" type="datetime-local" value={cliff} onChange={(event) => setCliff(event.target.value)} min={start} max={end} />
+                    <p className="hint">{t.create.cliffHint}</p>
+                  </div>
+                )}
+                {streamType === "milestone" && (
+                  <div className="field">
+                    <label htmlFor="milestoneCount">{t.create.numberOfMilestones}</label>
+                    <input id="milestoneCount" type="number" min="1" max="255" value={milestoneCount} onChange={(event) => setMilestoneCount(event.target.value)} />
+                    <p className="hint">{t.create.milestoneHint}</p>
+                  </div>
+                )}
                 <div className="action-row spread">
                   <button type="button" className="button secondary" onClick={() => setStep("recipient")}>
                     <ArrowLeft size={16} aria-hidden="true" /> {t.common.back}
@@ -578,9 +624,24 @@ function CreateStreamPageInner() {
                 <div className="review-box">
                   <p><strong>{t.create.tokenMint}:</strong> {mint}</p>
                   <p><strong>{t.create.totalRecipients}:</strong> {formTab === "manual" ? manualValidation.filter((row) => row.status === "valid").length : parsedCsvRows.filter((row) => row.status === "valid").length}</p>
+                  <hr style={{ margin: "12px 0", border: "none", borderTop: "1px solid var(--border)" }} />
+                  <p style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span><strong>{t.create.subtotal}:</strong></span>
+                    <span>{subtotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} {t.common.tokens}</span>
+                  </p>
+                  <p style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span><strong>{formatMessage(t.create.adminFee, { percent: "0.5" })}:</strong></span>
+                    <span>{adminFeeAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} {t.common.tokens}</span>
+                  </p>
+                  <p style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.1em' }}>
+                    <span><strong>{t.create.totalDeducted}:</strong></span>
+                    <span><strong>{totalDeductedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} {t.common.tokens}</strong></span>
+                  </p>
+                  <hr style={{ margin: "12px 0", border: "none", borderTop: "1px solid var(--border)" }} />
                   <p><strong>{t.create.startTime}:</strong> {new Date(start).toLocaleString()}</p>
                   <p><strong>{t.create.endTime}:</strong> {new Date(end).toLocaleString()}</p>
-                  {cliff && <p><strong>{t.create.cliffTime}:</strong> {new Date(cliff).toLocaleString()}</p>}
+                  {streamType === "cliff" && cliff && <p><strong>{t.create.cliffTime}:</strong> {new Date(cliff).toLocaleString()}</p>}
+                  {streamType === "milestone" && <p><strong>{t.create.numberOfMilestones}:</strong> {milestoneCount}</p>}
                 </div>
                 {error && <p className="message error">{error}</p>}
                 <div className="action-row spread">
@@ -601,8 +662,8 @@ function CreateStreamPageInner() {
                   {txStateLabel(txState, t.create.processing)}
                 </div>
                 <h3>{t.create.checkWallet}</h3>
-                <p className="muted">{t.create.approveWallet}</p>
-                {error && <p className="message error">{error}</p>}
+                <p className="muted" style={{ marginInline: 'auto', textAlign: 'center' }}>{t.create.approveWallet}</p>
+                {error && <p className="message error" style={{ marginInline: 'auto', textAlign: 'center' }}>{error}</p>}
               </div>
             )}
 
@@ -612,7 +673,7 @@ function CreateStreamPageInner() {
                   <Check size={36} aria-hidden="true" />
                 </div>
                 <h3>{t.create.successTitle}</h3>
-                <p className="muted">{success}</p>
+                <p className="muted" style={{ marginInline: 'auto', textAlign: 'center', wordBreak: 'break-all' }}>{success}</p>
                 <div className="stack link-stack">
                   {createdStreamIds.map((id, index) => (
                     <div key={id} className="panel compact-link-panel">
@@ -624,7 +685,7 @@ function CreateStreamPageInner() {
                           className="button secondary compact"
                           onClick={() => {
                             void navigator.clipboard.writeText(`${globalThis.location.origin}/stream/${id}`);
-                            window.alert(t.common.copied);
+                            globalThis.alert(t.common.copied);
                           }}
                         >
                           {t.common.copy}
@@ -633,7 +694,7 @@ function CreateStreamPageInner() {
                     </div>
                   ))}
                 </div>
-                <button type="button" className="button primary" onClick={() => { setStep("select_token"); setTxState("idle"); }}>
+                <button type="button" className="button primary" style={{ marginTop: '32px' }} onClick={() => { setStep("select_token"); setTxState("idle"); }}>
                   {t.create.createAnother}
                 </button>
               </div>
@@ -688,7 +749,7 @@ function TokenPicker({
                   <strong>{token.symbol}</strong>
                   <small>{token.name} · {shorten(token.mint, 6)}</small>
                 </span>
-                <span className="network-pill">Devnet</span>
+                <span className="network-pill">{t.header.devnet}</span>
               </button>
             );
           })}
@@ -699,7 +760,7 @@ function TokenPicker({
                 <strong>{t.create.customMint}</strong>
                 <small>{shorten(query.trim(), 6)}</small>
               </span>
-              <span className="network-pill">Devnet</span>
+              <span className="network-pill">{t.header.devnet}</span>
             </button>
           )}
           {filteredTokens.length === 0 && !canUseCustom && <p className="empty-token-copy">{t.create.noToken}</p>}

@@ -14,10 +14,13 @@ import {
 } from "@/components/privy-provider";
 import {
   buildCancelStreamTransaction,
+  buildUnlockMilestoneTransaction,
+  buildUnlockGroupMilestoneTransaction,
   fetchStreams,
   getConnection,
   prepareUnsignedTransaction,
   serializeTransactionError,
+  formatDateTime,
   type StreamView
 } from "@/lib/vesting";
 
@@ -49,6 +52,8 @@ function AdminPageInner() {
   const [streams, setStreams] = useState<StreamView[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [cancellingId, setCancellingId] = useState("");
+  const [settingMilestoneId, setSettingMilestoneId] = useState("");
+  const [settingGroupMilestoneId, setSettingGroupMilestoneId] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [cancelConfirm, setCancelConfirm] = useState<StreamView | null>(null);
@@ -57,6 +62,21 @@ function AdminPageInner() {
     if (!publicKey) return [];
     return streams.filter((stream) => stream.account.funder.equals(publicKey));
   }, [streams, publicKey]);
+
+  const groupedAdminStreams = useMemo(() => {
+    if (adminStreams.length === 0) return [];
+    const groups: Record<string, StreamView[]> = {};
+    for (const stream of adminStreams) {
+      // Group streams by common attributes set during batch creation
+      const key = `${stream.account.startTime.toString()}-${stream.account.endTime.toString()}-${stream.account.cliffTime.toString()}-${JSON.stringify(stream.account.vestingType)}-${stream.mint?.toBase58()}`;
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(stream);
+    }
+    // Sort groups descending by start time
+    return Object.values(groups).sort((a, b) => b[0].account.startTime.toNumber() - a[0].account.startTime.toNumber());
+  }, [adminStreams]);
 
   const loadStreams = useCallback(async () => {
     setIsLoading(true);
@@ -112,9 +132,53 @@ function AdminPageInner() {
       setSuccess(t.admin.cancelled.replace("{signature}", signature));
       await loadStreams();
     } catch (err) {
-      setError(serializeTransactionError(err));
+      setError(serializeTransactionError(err, t.errors));
     } finally {
       setCancellingId("");
+    }
+  }
+
+  async function unlockMilestone(stream: StreamView) {
+    if (!wallet || !publicKey) {
+      setError(t.create.connectWallet);
+      return;
+    }
+    setError("");
+    setSuccess("");
+    setSettingMilestoneId(stream.publicKey.toBase58());
+    try {
+      const transaction = await buildUnlockMilestoneTransaction({ connection, wallet: { publicKey }, stream });
+      const signature = await runSignedTx(async () =>
+        prepareUnsignedTransaction({ connection, transaction, feePayer: publicKey })
+      );
+      setSuccess(t.admin.milestoneUnlocked.replace("{signature}", signature));
+      await loadStreams();
+    } catch (err) {
+      setError(serializeTransactionError(err, t.errors));
+    } finally {
+      setSettingMilestoneId("");
+    }
+  }
+
+  async function unlockGroupMilestone(groupId: string, streams: StreamView[]) {
+    if (!wallet || !publicKey) {
+      setError(t.create.connectWallet);
+      return;
+    }
+    setError("");
+    setSuccess("");
+    setSettingGroupMilestoneId(groupId);
+    try {
+      const transaction = await buildUnlockGroupMilestoneTransaction({ connection, wallet: { publicKey }, streams });
+      const signature = await runSignedTx(async () =>
+        prepareUnsignedTransaction({ connection, transaction, feePayer: publicKey })
+      );
+      setSuccess(t.admin.milestoneUnlocked.replace("{signature}", signature));
+      await loadStreams();
+    } catch (err) {
+      setError(serializeTransactionError(err, t.errors));
+    } finally {
+      setSettingGroupMilestoneId("");
     }
   }
 
@@ -139,23 +203,97 @@ function AdminPageInner() {
     );
   } else {
     streamListContent = (
-      <div className="stream-list">
-        {adminStreams.map((stream) => {
-          const sid = stream.publicKey.toBase58();
-          const isCancelling = cancellingId === sid;
-          const canCancel =
-            !stream.account.isRevoked &&
-            stream.status !== "complete" &&
-            stream.status !== "revoked" &&
-            !!stream.vault;
+      <div className="stream-list-grouped" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+        {groupedAdminStreams.map((group) => {
+          const firstStream = group[0];
+          const recipientStr = group.length === 1 ? t.admin.groupRecipient : t.admin.groupRecipients;
+          const groupTitle = `${formatDateTime(firstStream.account.startTime)} - ${recipientStr.replace("{count}", String(group.length))}`;
+          
+          let vestingTypeLabel: string = t.common.linear;
+          if (typeof firstStream.account.vestingType === 'object' && firstStream.account.vestingType !== null) {
+            if ('milestone' in firstStream.account.vestingType && firstStream.account.milestoneCount > 0) {
+              vestingTypeLabel = t.common.milestone;
+            } else if ('cliff' in firstStream.account.vestingType) {
+              vestingTypeLabel = t.common.cliff;
+            }
+          }
+          
+          const unlockableStreams = group.filter((stream) => {
+            const isMilestoneStream = typeof stream.account.vestingType === 'object' && stream.account.vestingType !== null && 'milestone' in stream.account.vestingType;
+            return wallet && publicKey && isMilestoneStream && stream.account.authorityMilestone.equals(publicKey) && stream.account.milestonesReached < stream.account.milestoneCount && stream.status !== "revoked" && stream.status !== "complete";
+          });
+          const canUnlockGroup = unlockableStreams.length > 0;
+          const isSettingGroupMilestone = settingGroupMilestoneId === firstStream.publicKey.toBase58();
+          
           return (
-            <StreamCard
-              key={sid}
-              stream={stream}
-              mode="admin"
-              onCancel={canCancel ? () => setCancelConfirm(stream) : undefined}
-              isCancelling={isCancelling}
-            />
+            <div key={firstStream.publicKey.toBase58()} className="stream-group">
+              <h3 style={{ marginBottom: '16px', fontSize: '0.95em', fontWeight: 600, paddingBottom: '8px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  {groupTitle}
+                  {canUnlockGroup && (
+                    <button
+                      className="button primary compact"
+                      type="button"
+                      disabled={isSettingGroupMilestone}
+                      onClick={() => {
+                        const hasMaxMilestone = group.some((s) => {
+                          const isMilestone = typeof s.account.vestingType === 'object' && s.account.vestingType !== null && 'milestone' in s.account.vestingType;
+                          return isMilestone && s.account.milestonesReached >= s.account.milestoneCount;
+                        });
+                        if (hasMaxMilestone) {
+                          setError(t.errors.groupHasMaxMilestone || "Cannot set milestone for all: some streams have already reached their maximum milestones.");
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                          return;
+                        }
+                        unlockGroupMilestone(firstStream.publicKey.toBase58(), unlockableStreams);
+                      }}
+                    >
+                      {isSettingGroupMilestone ? t.streamCard.settingMilestone : t.admin.unlockGroup}
+                    </button>
+                  )}
+                </span>
+                <span className="token-label" style={{ fontSize: '0.85em', fontWeight: 'normal', color: 'var(--muted)' }}>
+                  {firstStream.symbol} • {vestingTypeLabel}
+                </span>
+              </h3>
+              <div className="stream-list">
+                {group.map((stream) => {
+                  const sid = stream.publicKey.toBase58();
+                  const isCancelling = cancellingId === sid;
+                  const isSettingMilestone = settingMilestoneId === sid;
+                  const canCancel =
+                    !stream.account.isRevoked &&
+                    stream.status !== "complete" &&
+                    stream.status !== "revoked" &&
+                    !!stream.vault;
+                  
+                  const isMilestoneStream = typeof stream.account.vestingType === 'object' && stream.account.vestingType !== null && 'milestone' in stream.account.vestingType;
+                  const canSetMilestone = wallet && publicKey && isMilestoneStream && stream.account.authorityMilestone.equals(publicKey) && stream.account.milestonesReached < stream.account.milestoneCount && stream.status !== "revoked" && stream.status !== "complete";
+
+                  const milestoneAction = canSetMilestone ? (
+                    <button
+                      className="button primary compact"
+                      type="button"
+                      disabled={isSettingMilestone}
+                      onClick={() => unlockMilestone(stream)}
+                    >
+                      {isSettingMilestone ? t.streamCard.settingMilestone : t.streamCard.setMilestone}
+                    </button>
+                  ) : undefined;
+
+                  return (
+                    <StreamCard
+                      key={sid}
+                      stream={stream}
+                      mode="admin"
+                      action={milestoneAction}
+                      onCancel={canCancel ? () => setCancelConfirm(stream) : undefined}
+                      isCancelling={isCancelling}
+                    />
+                  );
+                })}
+              </div>
+            </div>
           );
         })}
       </div>
@@ -164,6 +302,17 @@ function AdminPageInner() {
 
   return (
     <>
+      {(success || error) && (
+        <div className={`toast ${success ? 'success' : 'error'}`} role="status" aria-live="polite">
+          <div>
+            <p>{success || error}</p>
+          </div>
+          <button type="button" onClick={() => { setSuccess(""); setError(""); }} aria-label={t.common.close}>
+            {t.common.close}
+          </button>
+        </div>
+      )}
+
       {cancelConfirm && (
         <dialog open className="modal-backdrop" aria-labelledby="cancel-dialog-title">
           <div className="modal-box">
@@ -203,8 +352,7 @@ function AdminPageInner() {
             </button>
           </div>
 
-          {error && <p className="message error" style={{ marginBottom: 16 }}>{error}</p>}
-          {success && <p className="message success" style={{ marginBottom: 16 }}>{success}</p>}
+
 
           {streamListContent}
         </section>

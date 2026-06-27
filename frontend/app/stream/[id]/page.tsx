@@ -80,15 +80,15 @@ function StreamDetailPageInner({ id }: Readonly<{ id: string }>) {
           if (!data) throw new Error(t.stream.notFoundError);
           setStream(data);
         }
-      } catch (err) {
-        if (active) setError(serializeTransactionError(err));
+      } catch (err: unknown) {
+        if (active) setError(serializeTransactionError(err, t.errors));
       } finally {
         if (active) setLoading(false);
       }
     }
     void load();
     return () => { active = false; };
-  }, [connection, id, t.stream.notFoundError]);
+  }, [connection, id, t.stream.notFoundError, t.errors]);
 
   async function claim() {
     if (!stream) return;
@@ -130,8 +130,8 @@ function StreamDetailPageInner({ id }: Readonly<{ id: string }>) {
       // Reload stream data after claim
       const updatedStream = await fetchStream(connection, id);
       if (updatedStream) setStream(updatedStream);
-    } catch (err) {
-      setError(serializeTransactionError(err));
+    } catch (err: unknown) {
+      setError(serializeTransactionError(err, t.errors));
     } finally {
       setClaiming(false);
     }

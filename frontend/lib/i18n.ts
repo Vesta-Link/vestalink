@@ -14,6 +14,7 @@ export const dictionaries = {
       admin: "Admin",
       recipient: "Recipient",
       devnet: "Devnet",
+      mainnetComingSoon: "Mainnet (Coming soon)",
       toggleTheme: "Toggle theme",
       language: "Language"
     },
@@ -42,13 +43,31 @@ export const dictionaries = {
       custom: "Custom",
       connect: "Connect",
       connectWallet: "Connect Wallet",
-      privyRequiredTitle: "Privy app ID required"
+      privyRequiredTitle: "Privy app ID required",
+      linear: "Linear",
+      cliff: "Cliff",
+      milestone: "Milestone",
+      dayUnit: "d",
+      hourUnit: "h",
+      minuteUnit: "m",
+      tokens: "Tokens"
     },
     status: {
       pending: "Pending",
       active: "Active",
       complete: "Complete",
       revoked: "Revoked"
+    },
+    errors: {
+      walletRejected: "Wallet signature rejected. Please approve the transaction to continue.",
+      insufficientBalance: "Insufficient token or SOL balance for this stream. Please check your wallet.",
+      unsupportedContract: "The deployed contract does not support Request VESTA yet. Please contact the team.",
+      rpcTimeout: "RPC timeout. Transaction may still be processing. Check explorer or retry.",
+      noTokenAccount: "Unable to find token account for this wallet. Recipient may need to initialize it.",
+      invalidRecipient: "Invalid recipient wallet address.",
+      internalError: "Something went wrong while sending the transaction. Please try again or share this error with the team.",
+      txFailed: "Transaction failed. Please try again.",
+      groupHasMaxMilestone: "Cannot set milestone for all: some streams have already reached their maximum milestones."
     },
     landing: {
       eyebrow: "Solana token streams",
@@ -104,7 +123,7 @@ export const dictionaries = {
       steps: ["Select Token", "Recipients", "Schedule", "Review", "Signing", "Success"],
       selectToken: "1. Select Token",
       chooseToken: "Choose a token",
-      chooseTokenHint: "Search curated devnet tokens or paste a custom SPL mint.",
+      chooseTokenHint: "Search curated tokens or paste a custom SPL mint.",
       searchToken: "Search token or paste mint",
       tokenMint: "Token mint",
       tokenMintPlaceholder: "Devnet SPL mint address",
@@ -128,13 +147,21 @@ export const dictionaries = {
       csvLabel: "Recipients and amounts (CSV/Paste)",
       csvHint: "One recipient per line. Amounts use the mint decimals.",
       csvPlaceholder: "wallet_address,1000\nwallet_address,250.5",
+      walletPlaceholder: "Solana wallet address",
+      amountPlaceholder: "1000",
       configureSchedule: "3. Configure Schedule",
       start: "Start",
       end: "End",
       cliff: "Cliff date",
       optional: "optional",
       cliffHint: "No tokens unlock before this date. Defaults to the start date.",
+      streamType: "Stream Type",
+      numberOfMilestones: "Number of Milestones",
+      milestoneHint: "The total amount will be unlocked evenly across these milestones.",
       reviewTitle: "4. Review Stream",
+      subtotal: "Subtotal",
+      adminFee: "Admin Fee ({percent}%)",
+      totalDeducted: "Total Deducted from Wallet",
       totalRecipients: "Total Recipients",
       startTime: "Start Time",
       endTime: "End Time",
@@ -175,7 +202,11 @@ export const dictionaries = {
       cancelText: "Unvested tokens will be returned to your treasury account. This action cannot be undone.",
       keepStream: "Keep stream",
       confirmCancel: "Yes, cancel stream",
-      cancelled: "Stream cancelled. Tx: {signature}"
+      cancelled: "Stream cancelled. Tx: {signature}",
+      milestoneUnlocked: "Milestone unlocked. Tx: {signature}",
+      groupRecipient: "{count} Recipient",
+      groupRecipients: "{count} Recipients",
+      unlockGroup: "Set Milestone for All"
     },
     recipient: {
       privyRequired: "Set NEXT_PUBLIC_PRIVY_APP_ID in frontend/.env.local to connect wallets and claim vested tokens.",
@@ -209,7 +240,10 @@ export const dictionaries = {
       funder: "Funder",
       ended: "Ended",
       cancel: "Cancel",
-      cancelling: "Cancelling..."
+      cancelling: "Cancelling...",
+      setMilestone: "Set Milestone",
+      settingMilestone: "Setting...",
+      viewStream: "View Stream"
     }
   },
   id: {
@@ -217,6 +251,7 @@ export const dictionaries = {
       admin: "Admin",
       recipient: "Penerima",
       devnet: "Devnet",
+      mainnetComingSoon: "Mainnet (Segera hadir)",
       toggleTheme: "Ganti tema",
       language: "Bahasa"
     },
@@ -245,13 +280,31 @@ export const dictionaries = {
       custom: "Custom",
       connect: "Connect",
       connectWallet: "Connect Wallet",
-      privyRequiredTitle: "Privy app ID belum diisi"
+      privyRequiredTitle: "Privy app ID belum diisi",
+      linear: "Linear",
+      cliff: "Cliff",
+      milestone: "Milestone",
+      dayUnit: "h",
+      hourUnit: "j",
+      minuteUnit: "m",
+      tokens: "Token"
     },
     status: {
       pending: "Nunggu",
-      active: "Aktif",
+      active: "Jalan",
       complete: "Selesai",
-      revoked: "Dibatalkan"
+      revoked: "Batal"
+    },
+    errors: {
+      walletRejected: "Tanda tangan wallet ditolak. Tolong setujui transaksi untuk lanjut.",
+      insufficientBalance: "Saldo token atau SOL nggak cukup buat stream ini. Coba cek wallet kamu.",
+      unsupportedContract: "Kontrak belum support Request VESTA. Kontak tim kami ya.",
+      rpcTimeout: "RPC timeout. Transaksi mungkin masih diproses. Cek explorer atau coba lagi.",
+      noTokenAccount: "Nggak bisa nemuin token account buat wallet ini. Penerima mungkin perlu inisialisasi.",
+      invalidRecipient: "Alamat wallet penerima nggak valid.",
+      internalError: "Ada yang salah pas ngirim transaksi. Coba lagi atau lapor ke tim kami.",
+      txFailed: "Transaksi gagal. Coba lagi ya.",
+      groupHasMaxMilestone: "Tidak bisa set milestone untuk semua: ada stream individu yang sudah mencapai batas maksimal."
     },
     landing: {
       eyebrow: "Token stream di Solana",
@@ -307,7 +360,7 @@ export const dictionaries = {
       steps: ["Pilih Token", "Penerima", "Jadwal", "Review", "Signing", "Sukses"],
       selectToken: "1. Pilih Token",
       chooseToken: "Pilih token",
-      chooseTokenHint: "Cari token devnet atau tempel mint SPL custom.",
+      chooseTokenHint: "Cari token atau tempel mint SPL custom.",
       searchToken: "Cari token atau tempel mint",
       tokenMint: "Mint token",
       tokenMintPlaceholder: "Alamat mint SPL devnet",
@@ -331,13 +384,21 @@ export const dictionaries = {
       csvLabel: "Penerima dan jumlah (CSV/Paste)",
       csvHint: "Satu penerima per baris. Jumlah mengikuti decimal mint.",
       csvPlaceholder: "wallet_address,1000\nwallet_address,250.5",
+      walletPlaceholder: "Alamat wallet Solana",
+      amountPlaceholder: "1000",
       configureSchedule: "3. Atur Jadwal",
       start: "Mulai",
       end: "Selesai",
       cliff: "Tanggal cliff",
       optional: "opsional",
       cliffHint: "Token belum kebuka sebelum tanggal ini. Default-nya sama dengan mulai.",
+      streamType: "Tipe Stream",
+      numberOfMilestones: "Jumlah Milestone",
+      milestoneHint: "Total token akan dibagikan merata ke semua milestone ini.",
       reviewTitle: "4. Cek Stream",
+      subtotal: "Subtotal",
+      adminFee: "Biaya Admin ({percent}%)",
+      totalDeducted: "Total Dipotong dari Wallet",
       totalRecipients: "Total penerima",
       startTime: "Waktu mulai",
       endTime: "Waktu selesai",
@@ -378,7 +439,11 @@ export const dictionaries = {
       cancelText: "Token yang belum vesting akan dikembalikan ke akun treasury kamu. Aksi ini tidak bisa dibatalkan.",
       keepStream: "Tetap lanjut",
       confirmCancel: "Ya, batalkan",
-      cancelled: "Stream dibatalkan. Tx: {signature}"
+      cancelled: "Stream dibatalkan. Tx: {signature}",
+      milestoneUnlocked: "Milestone terbuka. Tx: {signature}",
+      groupRecipient: "{count} Penerima",
+      groupRecipients: "{count} Penerima",
+      unlockGroup: "Buka Milestone untuk Semua"
     },
     recipient: {
       privyRequired: "Isi NEXT_PUBLIC_PRIVY_APP_ID di frontend/.env.local biar wallet bisa connect dan token bisa diklaim.",
@@ -412,7 +477,10 @@ export const dictionaries = {
       funder: "Pengirim",
       ended: "Selesai",
       cancel: "Batalkan",
-      cancelling: "Membatalkan..."
+      cancelling: "Membatalkan...",
+      setMilestone: "Buka Milestone",
+      settingMilestone: "Tunggu...",
+      viewStream: "Lihat Stream"
     }
   },
   "zh-CN": {
@@ -420,6 +488,7 @@ export const dictionaries = {
       admin: "管理",
       recipient: "领取",
       devnet: "开发网",
+      mainnetComingSoon: "主网 (敬请期待)",
       toggleTheme: "切换主题",
       language: "语言"
     },
@@ -448,13 +517,31 @@ export const dictionaries = {
       custom: "自定义",
       connect: "连接",
       connectWallet: "连接钱包",
-      privyRequiredTitle: "需要 Privy App ID"
+      privyRequiredTitle: "需要 Privy App ID",
+      linear: "线性",
+      cliff: "悬崖 (Cliff)",
+      milestone: "里程碑 (Milestone)",
+      dayUnit: "天",
+      hourUnit: "小时",
+      minuteUnit: "分钟",
+      tokens: "代币"
     },
     status: {
       pending: "待开始",
       active: "进行中",
       complete: "已完成",
-      revoked: "已取消"
+      revoked: "已撤销"
+    },
+    errors: {
+      walletRejected: "钱包签名被拒绝。请批准交易以继续。",
+      insufficientBalance: "代币或 SOL 余额不足。请检查您的钱包。",
+      unsupportedContract: "部署的合约尚不支持 Request VESTA。请联系团队。",
+      rpcTimeout: "RPC 超时。交易可能仍在处理中。请检查浏览器或重试。",
+      noTokenAccount: "找不到该钱包的代币账户。接收方可能需要进行初始化。",
+      invalidRecipient: "无效的接收方钱包地址。",
+      internalError: "发送交易时出错。请重试或向团队报告此错误。",
+      txFailed: "交易失败。请重试。",
+      groupHasMaxMilestone: "无法全部设置里程碑：部分个人流已达到最大里程碑限制。"
     },
     landing: {
       eyebrow: "Solana 代币流",
@@ -510,7 +597,7 @@ export const dictionaries = {
       steps: ["选择代币", "接收方", "时间表", "检查", "签名", "成功"],
       selectToken: "1. 选择代币",
       chooseToken: "选择代币",
-      chooseTokenHint: "搜索精选开发网代币，或粘贴自定义 SPL Mint。",
+      chooseTokenHint: "搜索精选代币，或粘贴自定义 SPL Mint。",
       searchToken: "搜索代币或粘贴 Mint",
       tokenMint: "代币 Mint",
       tokenMintPlaceholder: "开发网 SPL Mint 地址",
@@ -534,13 +621,21 @@ export const dictionaries = {
       csvLabel: "接收方和数量（CSV/粘贴）",
       csvHint: "每行一个接收方。数量按 Mint 的小数位计算。",
       csvPlaceholder: "wallet_address,1000\nwallet_address,250.5",
+      walletPlaceholder: "Solana 钱包地址",
+      amountPlaceholder: "1000",
       configureSchedule: "3. 配置时间表",
       start: "开始",
       end: "结束",
       cliff: "Cliff 日期",
       optional: "可选",
       cliffHint: "在该日期前不会解锁代币。默认等于开始日期。",
+      streamType: "流类型",
+      numberOfMilestones: "里程碑数量",
+      milestoneHint: "代币总量将在这些里程碑中平均解锁。",
       reviewTitle: "4. 检查流",
+      subtotal: "小计",
+      adminFee: "管理费 ({percent}%)",
+      totalDeducted: "从钱包扣除总计",
       totalRecipients: "接收方总数",
       startTime: "开始时间",
       endTime: "结束时间",
@@ -581,7 +676,11 @@ export const dictionaries = {
       cancelText: "未归属的代币将返回你的 treasury 账户。此操作无法撤销。",
       keepStream: "保留流",
       confirmCancel: "确认取消",
-      cancelled: "流已取消。Tx：{signature}"
+      cancelled: "流已取消。Tx：{signature}",
+      milestoneUnlocked: "里程碑已解锁。Tx：{signature}",
+      groupRecipient: "{count} 个接收方",
+      groupRecipients: "{count} 个接收方",
+      unlockGroup: "全部设置里程碑"
     },
     recipient: {
       privyRequired: "请在 frontend/.env.local 中设置 NEXT_PUBLIC_PRIVY_APP_ID，以连接钱包并领取归属代币。",
@@ -615,7 +714,10 @@ export const dictionaries = {
       funder: "出资方",
       ended: "已结束",
       cancel: "取消",
-      cancelling: "取消中..."
+      cancelling: "取消中...",
+      setMilestone: "解锁里程碑",
+      settingMilestone: "设置中...",
+      viewStream: "查看流"
     }
   }
 } as const;

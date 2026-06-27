@@ -167,14 +167,20 @@ textarea:focus-visible {
   align-items: center;
 }
 
-.language-select select {
+.language-select-button {
   width: auto;
   min-width: 124px;
   min-height: 42px;
   border-radius: 999px;
-  padding: 0 34px 0 13px;
+  padding: 0 13px;
   background-color: var(--background);
   font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--border);
+  cursor: pointer;
 }
 
 .privy-user-pill {
@@ -540,6 +546,8 @@ textarea::placeholder {
   color: inherit;
   font-size: 13px;
   line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .toast a {
@@ -936,11 +944,6 @@ textarea::placeholder {
 .hero-section > p,
 .hero-section .action-row {
   animation: none;
-}
-
-/* ── Section headers ── */
-.section-header {
-  animation: fade-in-up 0.5s ease-out both;
 }
 
 /* ── Active progress glow ── */
@@ -1391,9 +1394,11 @@ textarea::placeholder {
   border-bottom: 1px solid var(--border);
 }
 
+/* ── Section headers ── */
 .section-header {
   margin-bottom: 48px;
   text-align: center;
+  animation: fade-in-up 0.5s ease-out both;
 }
 
 .section-header h2 {
@@ -1705,8 +1710,8 @@ textarea::placeholder {
     display: none;
   }
 
-  .language-select select {
-    min-width: 108px;
+  .language-select-button {
+    min-width: 110px;
   }
 
   .header-actions .privy-user-pill,
@@ -1742,4 +1747,58 @@ textarea::placeholder {
   .token-row .network-pill {
     display: none;
   }
+}
+
+/* Custom Dropdown */
+.custom-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.custom-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 140px;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  z-index: 50;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.custom-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+  color: var(--foreground);
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-family: inherit;
+}
+
+.custom-dropdown-item:hover:not(.disabled) {
+  background: var(--surface);
+}
+
+.custom-dropdown-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: var(--muted);
+}
+
+.custom-dropdown-item.selected {
+  background: var(--surface);
+  font-weight: 500;
 }

@@ -1,5 +1,3 @@
-import { VESTA_MINT } from "./vesting";
-
 export type DevnetToken = {
   symbol: string;
   name: string;
@@ -13,7 +11,7 @@ export const DEVNET_TOKENS: DevnetToken[] = [
   {
     symbol: "VESTA",
     name: "Vesta Test Token",
-    mint: VESTA_MINT.toBase58(),
+    mint: "4zFYPYxDAio8BDPqfpAWhEMzpyPANxJABmbWPmBq6LKx",
     decimals: 6,
     isFaucetToken: true,
     description: "Devnet dummy SPL token for testing the vesting workflow."

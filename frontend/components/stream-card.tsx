@@ -9,7 +9,7 @@ import {
   type StreamView
 } from "@/lib/vesting";
 
-function formatTimeRemaining(endTime: { toNumber: () => number }, endedLabel: string) {
+function formatTimeRemaining(endTime: { toNumber: () => number }, endedLabel: string, units: { d: string, h: string, m: string }) {
   const now = Math.floor(Date.now() / 1000);
   const end = endTime.toNumber();
   const diff = end - now;
@@ -17,9 +17,9 @@ function formatTimeRemaining(endTime: { toNumber: () => number }, endedLabel: st
   const days = Math.floor(diff / 86_400);
   const hours = Math.floor((diff % 86_400) / 3_600);
   const minutes = Math.floor((diff % 3_600) / 60);
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
+  if (days > 0) return `${days}${units.d} ${hours}${units.h}`;
+  if (hours > 0) return `${hours}${units.h} ${minutes}${units.m}`;
+  return `${minutes}${units.m}`;
 }
 
 export function StreamCard({
@@ -52,6 +52,19 @@ export function StreamCard({
   const percent = Math.min(stream.progress, 100);
   const hasClaimable = claimableRaw > 0n;
 
+  let vestingTypeLabel = ` • ${t.common.linear}`;
+  let isCliff = false;
+  if (typeof stream.account.vestingType === 'object' && stream.account.vestingType !== null) {
+    if ('milestone' in stream.account.vestingType && stream.account.milestoneCount > 0) {
+      vestingTypeLabel = ` • ${t.common.milestone} (${stream.account.milestonesReached}/${stream.account.milestoneCount})`;
+    } else if ('cliff' in stream.account.vestingType) {
+      vestingTypeLabel = ` • ${t.common.cliff}`;
+      isCliff = true;
+    }
+  }
+
+  const tokenDisplay = stream.name ? `${stream.name} (${stream.symbol})` : stream.symbol;
+
   return (
     <article className="stream-card" style={hasClaimable && mode === "recipient" ? { borderColor: "var(--accent)", boxShadow: "var(--accent-glow)" } : {}}>
       <div className="stream-card-top">
@@ -67,7 +80,17 @@ export function StreamCard({
             <ExternalLink size={14} aria-hidden="true" />
           </a>
         </div>
-        <StatusPill status={stream.status} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+          <StatusPill status={stream.status} />
+          <a
+            href={explorerUrl(stream.publicKey.toBase58())}
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: "var(--muted)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11 }}
+          >
+            {t.streamCard.viewStream} <ExternalLink size={10} aria-hidden="true" />
+          </a>
+        </div>
       </div>
 
       {/* Progress Visualization */}
@@ -119,17 +142,38 @@ export function StreamCard({
         </div>
         <div>
           <span className="label">{t.common.remaining}</span>
-          <strong>{formatTimeRemaining(account.endTime, t.streamCard.ended)}</strong>
+          <strong>{formatTimeRemaining(account.endTime, t.streamCard.ended, { d: t.common.dayUnit, h: t.common.hourUnit, m: t.common.minuteUnit })}</strong>
         </div>
       </div>
 
       <div className="schedule-row">
         <span>{formatDateTime(account.startTime)}</span>
+        {isCliff && (
+          <span style={{ color: 'var(--accent)', textAlign: 'center' }}>
+            {t.create.cliffTime}: {formatDateTime(account.cliffTime)}
+          </span>
+        )}
         <span>{formatDateTime(account.endTime)}</span>
       </div>
 
       <div className="stream-footer">
-        <span className="token-label">{stream.symbol}</span>
+        <span className="token-label">
+          {stream.mint ? (
+            <a
+              href={explorerUrl(stream.mint.toBase58())}
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: "inherit", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, marginRight: 4 }}
+              title="View on Explorer"
+            >
+              {tokenDisplay}
+              <ExternalLink size={12} aria-hidden="true" />
+            </a>
+          ) : (
+            tokenDisplay
+          )}
+          {vestingTypeLabel}
+        </span>
         <div className="stream-footer-actions">
           {canCancel && (
             <button
