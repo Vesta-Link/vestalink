@@ -175,11 +175,11 @@ export function StreamCard({
               href={explorerUrl(stream.mint.toBase58())}
               target="_blank"
               rel="noreferrer"
-              style={{ color: "inherit", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, marginRight: 4 }}
+              style={{ color: "inherit", textDecoration: "none" }}
               title="View on Explorer"
             >
               {tokenDisplay}
-              <ExternalLink size={12} aria-hidden="true" />
+              <ExternalLink size={12} aria-hidden="true" style={{ display: 'inline', verticalAlign: 'baseline', marginLeft: 4, marginRight: 4 }} />
             </a>
           ) : (
             tokenDisplay

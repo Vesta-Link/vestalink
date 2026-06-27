@@ -195,19 +195,31 @@ textarea:focus-visible {
 }
 
 .network-pill,
-.status-pill,
-.token-label {
+.status-pill {
   min-height: 32px;
   display: inline-flex;
   align-items: center;
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 4px 10px;
+  padding: 0 10px;
   background: var(--background);
   color: var(--muted);
   font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
   font-size: 12px;
-  white-space: normal;
+  white-space: nowrap;
+}
+
+.token-label {
+  display: inline-block;
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 6px 12px;
+  background: var(--background);
+  color: var(--muted);
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  line-height: 1.4;
   word-break: break-word;
   max-width: 100%;
 }
