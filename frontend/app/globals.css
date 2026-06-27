@@ -1658,7 +1658,8 @@ textarea::placeholder {
   }
 
   .site-header {
-    position: static;
+    position: relative;
+    z-index: 10;
     gap: 12px;
   }
 
@@ -1706,9 +1707,6 @@ textarea::placeholder {
     flex-direction: column;
   }
 
-  .network-pill {
-    display: none;
-  }
 
   .language-select-button {
     min-width: 110px;
@@ -1801,4 +1799,51 @@ textarea::placeholder {
 .custom-dropdown-item.selected {
   background: var(--surface);
   font-weight: 500;
+}
+
+/* Scroll to Top */
+.scroll-to-top {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 40;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--foreground);
+  color: var(--inverse);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-soft);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(16px);
+  transition: opacity 0.3s ease, transform 0.3s ease, background 160ms ease, color 160ms ease;
+}
+
+.scroll-to-top.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.scroll-to-top:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.15);
+}
+
+.scroll-to-top:active {
+  transform: scale(0.95);
+}
+
+@media (max-width: 640px) {
+  .scroll-to-top {
+    bottom: 20px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+  }
 }

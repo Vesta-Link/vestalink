@@ -4,6 +4,7 @@ import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { SiteHeader } from "@/components/site-header";
 import { ThemeLanguageProvider } from "@/components/preferences-provider";
 import { PrivySolanaProvider } from "@/components/privy-provider";
+import { ScrollToTop } from "@/components/scroll-to-top";
 
 import "./globals.css";
 
@@ -55,6 +56,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <PrivySolanaProvider>
             <SiteHeader />
             {children}
+            <ScrollToTop />
           </PrivySolanaProvider>
         </ThemeLanguageProvider>
       </body>
