@@ -32,13 +32,15 @@ export function StreamCard({
   mode,
   action,
   onCancel,
-  isCancelling
+  isCancelling,
+  hideTokenName
 }: Readonly<{
   stream: StreamView;
   mode: "admin" | "recipient";
   action?: React.ReactNode;
   onCancel?: () => void;
   isCancelling?: boolean;
+  hideTokenName?: boolean;
 }>) {
   const { t } = usePreferences();
   const { account } = stream;
@@ -57,13 +59,13 @@ export function StreamCard({
   const percent = Math.min(stream.progress, 100);
   const hasClaimable = claimableRaw > 0n;
 
-  let vestingTypeLabel = ` • ${t.common.linear}`;
+  let vestingTypeLabel: string = t.common.linear;
   let isCliff = false;
   if (typeof stream.account.vestingType === 'object' && stream.account.vestingType !== null) {
     if ('milestone' in stream.account.vestingType && stream.account.milestoneCount > 0) {
-      vestingTypeLabel = ` • ${t.common.milestone} (${stream.account.milestonesReached}/${stream.account.milestoneCount})`;
+      vestingTypeLabel = `${t.common.milestone} (${stream.account.milestonesReached}/${stream.account.milestoneCount})`;
     } else if ('cliff' in stream.account.vestingType) {
-      vestingTypeLabel = ` • ${t.common.cliff}`;
+      vestingTypeLabel = t.common.cliff;
       isCliff = true;
     }
   }
@@ -170,19 +172,24 @@ export function StreamCard({
 
       <div className="stream-footer">
         <span className="token-label">
-          {stream.mint ? (
-            <a
-              href={explorerUrl(stream.mint.toBase58())}
-              target="_blank"
-              rel="noreferrer"
-              style={{ color: "inherit", textDecoration: "none" }}
-              title="View on Explorer"
-            >
-              {tokenDisplay}
-              <ExternalLink size={12} aria-hidden="true" style={{ display: 'inline', verticalAlign: 'baseline', marginLeft: 4, marginRight: 4 }} />
-            </a>
-          ) : (
-            tokenDisplay
+          {!hideTokenName && (
+            <>
+              {stream.mint ? (
+                <a
+                  href={explorerUrl(stream.mint.toBase58())}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: "inherit", textDecoration: "none" }}
+                  title="View on Explorer"
+                >
+                  {tokenDisplay}
+                  <ExternalLink size={12} aria-hidden="true" style={{ display: 'inline', verticalAlign: 'baseline', marginLeft: 4, marginRight: 4 }} />
+                </a>
+              ) : (
+                tokenDisplay
+              )}
+              {" • "}
+            </>
           )}
           {vestingTypeLabel}
         </span>
