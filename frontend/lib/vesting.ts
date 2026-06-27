@@ -480,36 +480,43 @@ export async function fetchStreams(connection: Connection) {
     account: VestalinkAccount;
   }>;
 
-  return Promise.all(
-    rows.map(async (row) => {
-      const account = row.account;
-      const now = Math.floor(Date.now() / 1000);
-      const total = BigInt(account.totalAmount.toString());
-      const claimed = BigInt(account.claimedAmount.toString());
-      const start = account.startTime.toNumber();
-      const end = account.endTime.toNumber();
-      const unlockedRaw = calculateUnlocked(total, start, end, now, account);
-      const claimableRaw = unlockedRaw > claimed ? unlockedRaw - claimed : 0n;
-      const lockedRaw = total > unlockedRaw ? total - unlockedRaw : 0n;
-      const progress = total === 0n ? 0 : Number((unlockedRaw * 10_000n) / total) / 100;
-      const token = await resolveVault(connection, row.publicKey);
+  const streamViews: StreamView[] = [];
+  const chunkSize = 5; // Prevent RPC rate limits on public devnet
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const chunk = rows.slice(i, i + chunkSize);
+    const resolvedChunk = await Promise.all(
+      chunk.map(async (row) => {
+        const account = row.account;
+        const now = Math.floor(Date.now() / 1000);
+        const total = BigInt(account.totalAmount.toString());
+        const claimed = BigInt(account.claimedAmount.toString());
+        const start = account.startTime.toNumber();
+        const end = account.endTime.toNumber();
+        const unlockedRaw = calculateUnlocked(total, start, end, now, account);
+        const claimableRaw = unlockedRaw > claimed ? unlockedRaw - claimed : 0n;
+        const lockedRaw = total > unlockedRaw ? total - unlockedRaw : 0n;
+        const progress = total === 0n ? 0 : Number((unlockedRaw * 10_000n) / total) / 100;
+        const token = await resolveVault(connection, row.publicKey);
 
-      return {
-        publicKey: row.publicKey,
-        account,
-        vault: token?.vault,
-        mint: token?.mint,
-        decimals: token?.decimals ?? 0,
-        symbol: token?.symbol ?? "tokens",
-        name: token?.name,
-        unlockedRaw,
-        claimableRaw,
-        lockedRaw,
-        progress,
-        status: getStatus(now, start, end, account)
-      } satisfies StreamView;
-    })
-  );
+        return {
+          publicKey: row.publicKey,
+          account,
+          vault: token?.vault,
+          mint: token?.mint,
+          decimals: token?.decimals ?? 0,
+          symbol: token?.symbol ?? "tokens",
+          name: token?.name,
+          unlockedRaw,
+          claimableRaw,
+          lockedRaw,
+          progress,
+          status: getStatus(now, start, end, account)
+        } satisfies StreamView;
+      })
+    );
+    streamViews.push(...resolvedChunk);
+  }
+  return streamViews;
 }
 
 export async function fetchStream(connection: Connection, id: string): Promise<StreamView | null> {
@@ -579,6 +586,8 @@ function getStatus(now: number, start: number, end: number, account: VestalinkAc
   return "active";
 }
 
+const globalMintCache = new Map<string, any>();
+
 async function resolveVault(connection: Connection, vestingState: PublicKey) {
   const accounts = await connection.getParsedTokenAccountsByOwner(vestingState, {
     programId: TOKEN_PROGRAM_ID
@@ -588,8 +597,14 @@ async function resolveVault(connection: Connection, vestingState: PublicKey) {
   if (!first) return undefined;
 
   const mint = new PublicKey(first.account.data.parsed.info.mint);
-  const mintInfo = await getMint(connection, mint);
-  const devnetToken = DEVNET_TOKENS.find(t => t.mint === mint.toBase58());
+  const mintAddressStr = mint.toBase58();
+  
+  if (!globalMintCache.has(mintAddressStr)) {
+    const info = await getMint(connection, mint);
+    globalMintCache.set(mintAddressStr, info);
+  }
+  const mintInfo = globalMintCache.get(mintAddressStr);
+  const devnetToken = DEVNET_TOKENS.find(t => t.mint === mintAddressStr);
 
   return {
     vault: first.pubkey,

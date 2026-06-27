@@ -169,9 +169,9 @@ The app will be available at [http://localhost:3000](http://localhost:3000).
 
 ## Instruction Reference
 
-VestaLink defines the following core instructions. Many instructions have aliases for developer convenience.
+VestaLink defines the following core instructions.
 
-### 1. `create_stream` (Alias: `create_vesting_schedule`)
+### 1. `create_stream`
 Creates a new vesting schedule and locks tokens in a program-derived vault.
 
 - **Parameters (`CreateVestingParams`)**:
@@ -228,7 +228,7 @@ Unlocks the next milestone for a milestone-based vesting schedule.
     .rpc();
   ```
 
-### 3. `claim` (Aliases: `withdraw`, `claim_tokens`)
+### 3. `withdraw`
 Allows the recipient to claim their currently unlocked tokens.
 
 - **Parameters**: None.
@@ -236,7 +236,7 @@ Allows the recipient to claim their currently unlocked tokens.
 - **Error Codes**: `UnauthorizedClaimant`, `InvalidTokenOwner`, `InvalidTokenMint`, `InvalidVaultOwner`, `InsufficientUnlockedTokens`, `ArithmeticOverflow`.
 - **Example Usage**:
   ```typescript
-  await program.methods.claim()
+  await program.methods.withdraw()
     .accountsPartial({
       vestingState: vestingStatePda,
       recipient: recipientPublicKey,
@@ -248,7 +248,7 @@ Allows the recipient to claim their currently unlocked tokens.
     .rpc();
   ```
 
-### 4. `revoke_vesting` (Alias: `cancel_vesting`)
+### 4. `revoke_vesting`
 Revokes an active vesting schedule.
 
 - **Parameters**: None.
@@ -301,6 +301,41 @@ Requests test tokens from the VESTA faucet (localnet/devnet only).
       requesterTokenAccount: requesterTokenAccountAddress,
       faucetAuthority: faucetPda,
       tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .rpc();
+  ```
+
+### 7. `initialize_config`
+Initializes the global configuration for the program, setting the admin address that will receive protocol fees.
+
+- **Parameters**: None.
+- **Expected Behavior**: Initializes the `GlobalConfig` PDA and sets the admin to the payer of the transaction. Must be called by the program upgrade authority.
+- **Error Codes**: `Unauthorized`.
+- **Example Usage**:
+  ```typescript
+  await program.methods.initializeConfig()
+    .accountsPartial({
+      globalConfig: globalConfigPda,
+      admin: upgradeAuthorityPublicKey,
+      programData: programDataAddress,
+      program: programId,
+      systemProgram: anchor.web3.SystemProgram.programId,
+    })
+    .rpc();
+  ```
+
+### 8. `update_admin`
+Updates the admin address in the global configuration.
+
+- **Parameters**: `new_admin` (`Pubkey`)
+- **Expected Behavior**: Updates the `admin` field in the `GlobalConfig` PDA. Must be called by the current admin.
+- **Error Codes**: `Unauthorized`.
+- **Example Usage**:
+  ```typescript
+  await program.methods.updateAdmin(newAdminPublicKey)
+    .accountsPartial({
+      globalConfig: globalConfigPda,
+      admin: currentAdminPublicKey,
     })
     .rpc();
   ```

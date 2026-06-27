@@ -43,17 +43,6 @@ describe("create_stream", () => {
     assert.equal(vault.amount.toString(), totalAmount.toString());
   });
 
-  it("keeps create_vesting_schedule as a working alias", async () => {
-    const stream = await fixture.createStream({
-      method: "createVestingSchedule",
-      nonce: new anchor.BN(2),
-    });
-    const state = await fixture.program.account.vestingState.fetch(
-      stream.vestingStatePda
-    );
-    assert.equal(state.totalAmount.toString(), stream.totalAmount.toString());
-  });
-
   it("rejects invalid stream parameters", async () => {
     await expectError(
       () =>

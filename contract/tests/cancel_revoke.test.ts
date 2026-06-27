@@ -48,22 +48,6 @@ describe("cancel and revoke", () => {
       assert.equal(finalState.claimedAmount.toString(), vested.toString());
     });
 
-    it("keeps cancel_vesting as a working revoke alias", async () => {
-      const now = nowSeconds();
-      const stream = await fixture.createStream({
-        startTime: new anchor.BN(now - 50),
-        endTime: new anchor.BN(now + 50),
-        nonce: new anchor.BN(21),
-      });
-
-      await fixture.revokeVesting(stream, { method: "cancelVesting" });
-
-      const state = await fixture.program.account.vestingState.fetch(
-        stream.vestingStatePda
-      );
-      assert.isTrue(state.isRevoked);
-    });
-
     it("rejects repeated revocation", async () => {
       const now = nowSeconds();
       const stream = await fixture.createStream({
@@ -164,7 +148,7 @@ describe("cancel and revoke", () => {
 
       assert.isTrue(state.isRevoked);
       const vested = Number(state.vestedAmountAtRevocation.toString());
-      assert.isAtMost(vested, 10_000); 
+      assert.isAtMost(vested, 10_000);
 
       const funderAfter = await getTokenBalance(fixture.provider, fixture.funderTokenAccount);
       const returned = Number(funderAfter - funderBefore);
