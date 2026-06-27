@@ -53,13 +53,17 @@ export function StreamCard({
   const hasClaimable = claimableRaw > 0n;
 
   let vestingTypeLabel = ` • ${t.common.linear}`;
+  let isCliff = false;
   if (typeof stream.account.vestingType === 'object' && stream.account.vestingType !== null) {
     if ('milestone' in stream.account.vestingType && stream.account.milestoneCount > 0) {
       vestingTypeLabel = ` • ${t.common.milestone} (${stream.account.milestonesReached}/${stream.account.milestoneCount})`;
     } else if ('cliff' in stream.account.vestingType) {
       vestingTypeLabel = ` • ${t.common.cliff}`;
+      isCliff = true;
     }
   }
+
+  const tokenDisplay = stream.name ? `${stream.name} (${stream.symbol})` : stream.symbol;
 
   return (
     <article className="stream-card" style={hasClaimable && mode === "recipient" ? { borderColor: "var(--accent)", boxShadow: "var(--accent-glow)" } : {}}>
@@ -144,7 +148,7 @@ export function StreamCard({
 
       <div className="schedule-row">
         <span>{formatDateTime(account.startTime)}</span>
-        {typeof stream.account.vestingType === 'object' && stream.account.vestingType !== null && 'cliff' in stream.account.vestingType && (
+        {isCliff && (
           <span style={{ color: 'var(--accent)', textAlign: 'center' }}>
             {t.create.cliffTime}: {formatDateTime(account.cliffTime)}
           </span>
@@ -162,11 +166,11 @@ export function StreamCard({
               style={{ color: "inherit", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, marginRight: 4 }}
               title="View on Explorer"
             >
-              {stream.symbol}
+              {tokenDisplay}
               <ExternalLink size={12} aria-hidden="true" />
             </a>
           ) : (
-            stream.symbol
+            tokenDisplay
           )}
           {vestingTypeLabel}
         </span>

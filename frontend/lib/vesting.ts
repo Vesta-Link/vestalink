@@ -14,6 +14,7 @@ import {
   TransactionInstruction
 } from "@solana/web3.js";
 
+import { DEVNET_TOKENS } from "./devnet-tokens";
 import { VESTALINK_IDL } from "./idl";
 
 export const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana.com";
@@ -55,6 +56,7 @@ export type StreamView = {
   mint?: PublicKey;
   decimals: number;
   symbol: string;
+  name?: string;
   unlockedRaw: bigint;
   claimableRaw: bigint;
   lockedRaw: bigint;
@@ -499,6 +501,7 @@ export async function fetchStreams(connection: Connection) {
         mint: token?.mint,
         decimals: token?.decimals ?? 0,
         symbol: token?.symbol ?? "tokens",
+        name: token?.name,
         unlockedRaw,
         claimableRaw,
         lockedRaw,
@@ -536,6 +539,7 @@ export async function fetchStream(connection: Connection, id: string): Promise<S
       mint: token?.mint,
       decimals: token?.decimals ?? 0,
       symbol: token?.symbol ?? "tokens",
+      name: token?.name,
       unlockedRaw,
       claimableRaw,
       lockedRaw,
@@ -585,11 +589,14 @@ async function resolveVault(connection: Connection, vestingState: PublicKey) {
 
   const mint = new PublicKey(first.account.data.parsed.info.mint);
   const mintInfo = await getMint(connection, mint);
+  const devnetToken = DEVNET_TOKENS.find(t => t.mint === mint.toBase58());
+
   return {
     vault: first.pubkey,
     mint,
     decimals: mintInfo.decimals,
-    symbol: shorten(mint)
+    symbol: devnetToken ? devnetToken.symbol : shorten(mint),
+    name: devnetToken ? devnetToken.name : undefined
   };
 }
 
