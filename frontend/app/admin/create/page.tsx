@@ -638,9 +638,9 @@ function CreateStreamPageInner() {
                     <span style={{ textAlign: 'right' }}><strong>{totalDeductedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} {t.common.tokens}</strong></span>
                   </p>
                   <hr style={{ margin: "12px 0", border: "none", borderTop: "1px solid var(--border)" }} />
-                  <p><strong>{t.create.startTime}:</strong> {new Date(start).toLocaleString()}</p>
-                  <p><strong>{t.create.endTime}:</strong> {new Date(end).toLocaleString()}</p>
-                  {streamType === "cliff" && cliff && <p><strong>{t.create.cliffTime}:</strong> {new Date(cliff).toLocaleString()}</p>}
+                  <p><strong>{t.create.startTime}:</strong> {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(start))}</p>
+                  <p><strong>{t.create.endTime}:</strong> {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(end))}</p>
+                  {streamType === "cliff" && cliff && <p><strong>{t.create.cliffTime}:</strong> {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(cliff))}</p>}
                   {streamType === "milestone" && <p><strong>{t.create.numberOfMilestones}:</strong> {milestoneCount}</p>}
                 </div>
                 {error && <p className="message error">{error}</p>}
