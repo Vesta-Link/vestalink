@@ -205,7 +205,7 @@ export const dictionaries = {
       milestoneUnlocked: "Milestone unlocked. Tx: {signature}",
       groupRecipient: "{count} Recipient",
       groupRecipients: "{count} Recipients",
-      unlockGroup: "Unlock All"
+      unlockGroup: "Set Milestone for All"
     },
     recipient: {
       privyRequired: "Set NEXT_PUBLIC_PRIVY_APP_ID in frontend/.env.local to connect wallets and claim vested tokens.",
@@ -440,7 +440,7 @@ export const dictionaries = {
       milestoneUnlocked: "Milestone terbuka. Tx: {signature}",
       groupRecipient: "{count} Penerima",
       groupRecipients: "{count} Penerima",
-      unlockGroup: "Buka Semua"
+      unlockGroup: "Buka Milestone untuk Semua"
     },
     recipient: {
       privyRequired: "Isi NEXT_PUBLIC_PRIVY_APP_ID di frontend/.env.local biar wallet bisa connect dan token bisa diklaim.",
@@ -675,7 +675,7 @@ export const dictionaries = {
       milestoneUnlocked: "里程碑已解锁。Tx：{signature}",
       groupRecipient: "{count} 个接收方",
       groupRecipients: "{count} 个接收方",
-      unlockGroup: "全部解锁"
+      unlockGroup: "全部设置里程碑"
     },
     recipient: {
       privyRequired: "请在 frontend/.env.local 中设置 NEXT_PUBLIC_PRIVY_APP_ID，以连接钱包并领取归属代币。",
