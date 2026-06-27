@@ -622,20 +622,20 @@ function CreateStreamPageInner() {
               <div className="wizard-step">
                 <h3>{t.create.reviewTitle}</h3>
                 <div className="review-box">
-                  <p><strong>{t.create.tokenMint}:</strong> {mint}</p>
+                  <p style={{ wordBreak: 'break-all' }}><strong>{t.create.tokenMint}:</strong> {mint}</p>
                   <p><strong>{t.create.totalRecipients}:</strong> {formTab === "manual" ? manualValidation.filter((row) => row.status === "valid").length : parsedCsvRows.filter((row) => row.status === "valid").length}</p>
                   <hr style={{ margin: "12px 0", border: "none", borderTop: "1px solid var(--border)" }} />
-                  <p style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <p style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
                     <span><strong>{t.create.subtotal}:</strong></span>
-                    <span>{subtotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} {t.common.tokens}</span>
+                    <span style={{ textAlign: 'right' }}>{subtotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} {t.common.tokens}</span>
                   </p>
-                  <p style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <p style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
                     <span><strong>{formatMessage(t.create.adminFee, { percent: "0.5" })}:</strong></span>
-                    <span>{adminFeeAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} {t.common.tokens}</span>
+                    <span style={{ textAlign: 'right' }}>{adminFeeAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} {t.common.tokens}</span>
                   </p>
-                  <p style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.1em' }}>
+                  <p style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap', fontSize: '1.1em' }}>
                     <span><strong>{t.create.totalDeducted}:</strong></span>
-                    <span><strong>{totalDeductedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} {t.common.tokens}</strong></span>
+                    <span style={{ textAlign: 'right' }}><strong>{totalDeductedAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} {t.common.tokens}</strong></span>
                   </p>
                   <hr style={{ margin: "12px 0", border: "none", borderTop: "1px solid var(--border)" }} />
                   <p><strong>{t.create.startTime}:</strong> {new Date(start).toLocaleString()}</p>
