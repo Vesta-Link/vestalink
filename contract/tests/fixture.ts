@@ -144,7 +144,6 @@ export class VestalinkFixture {
       vestingType?: any;
       cliffTime?: anchor.BN;
       milestoneCount?: number;
-      method?: "createStream" | "createVestingSchedule";
       funderTokenAcct?: anchor.web3.PublicKey;
       vaultTokenAccount?: anchor.web3.PublicKey;
     } = {}
@@ -213,10 +212,7 @@ export class VestalinkFixture {
     }
     const adminAddress = globalConfigInfo ? globalConfigInfo.admin : this.provider.wallet.publicKey;
 
-    const builder =
-      params.method === "createVestingSchedule"
-        ? this.program.methods.createVestingSchedule(args)
-        : this.program.methods.createStream(args);
+    const builder = this.program.methods.createStream(args);
 
     await builder
       .accountsPartial({
@@ -254,18 +250,10 @@ export class VestalinkFixture {
     params: {
       signer?: anchor.web3.Keypair;
       recipientTokenAccount?: anchor.web3.PublicKey;
-      method?: "withdraw" | "claim" | "claimTokens";
     } = {}
   ) {
     const signer = params.signer ?? stream.streamRecipient;
-    let builder;
-    if (params.method === "claim") {
-      builder = this.program.methods.claim();
-    } else if (params.method === "claimTokens") {
-      builder = this.program.methods.claimTokens();
-    } else {
-      builder = this.program.methods.withdraw();
-    }
+    const builder = this.program.methods.withdraw();
 
     return builder
       .accountsPartial({
@@ -283,15 +271,11 @@ export class VestalinkFixture {
   async revokeVesting(
     stream: Awaited<ReturnType<typeof this.createStream>>,
     params: {
-      method?: "revokeVesting" | "cancelVesting";
       authorityRevoker?: anchor.web3.PublicKey;
       treasuryReturnAddress?: anchor.web3.PublicKey;
     } = {}
   ) {
-    const builder =
-      params.method === "cancelVesting"
-        ? this.program.methods.cancelVesting()
-        : this.program.methods.revokeVesting();
+    const builder = this.program.methods.revokeVesting();
 
     return builder
       .accountsPartial({

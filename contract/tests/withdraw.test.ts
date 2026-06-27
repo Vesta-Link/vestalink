@@ -71,7 +71,7 @@ describe("withdraw", () => {
       nonce: new anchor.BN(12),
     });
 
-    await fixture.withdraw(stream, { method: "claimTokens" });
+    await fixture.withdraw(stream);
 
     const state = await fixture.program.account.vestingState.fetch(
       stream.vestingStatePda
@@ -98,7 +98,7 @@ describe("withdraw", () => {
       nonce: new anchor.BN(14),
     });
 
-    await fixture.withdraw(stream, { method: "claim" });
+    await fixture.withdraw(stream);
     await expectError(() => fixture.withdraw(stream), "InsufficientUnlockedTokens");
   });
 

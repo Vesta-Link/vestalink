@@ -31,13 +31,6 @@ pub mod vestalink {
         create_stream_impl(ctx, params)
     }
 
-    pub fn create_vesting_schedule(
-        ctx: Context<CreateVestingSchedule>,
-        params: CreateVestingParams,
-    ) -> Result<()> {
-        create_stream_impl(ctx, params)
-    }
-
     pub fn unlock_milestone(ctx: Context<UnlockMilestone>) -> Result<()> {
         unlock_milestone_impl(ctx)
     }
@@ -46,19 +39,7 @@ pub mod vestalink {
         withdraw_impl(ctx)
     }
 
-    pub fn claim(ctx: Context<Withdraw>) -> Result<()> {
-        withdraw_impl(ctx)
-    }
-
-    pub fn claim_tokens(ctx: Context<Withdraw>) -> Result<()> {
-        withdraw_impl(ctx)
-    }
-
     pub fn revoke_vesting(ctx: Context<RevokeVesting>) -> Result<()> {
-        revoke_vesting_impl(ctx)
-    }
-
-    pub fn cancel_vesting(ctx: Context<RevokeVesting>) -> Result<()> {
         revoke_vesting_impl(ctx)
     }
 
