@@ -76,7 +76,17 @@ export function StreamCard({
             <ExternalLink size={14} aria-hidden="true" />
           </a>
         </div>
-        <StatusPill status={stream.status} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+          <StatusPill status={stream.status} />
+          <a
+            href={explorerUrl(stream.publicKey.toBase58())}
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: "var(--muted)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11 }}
+          >
+            {t.streamCard.viewStream} <ExternalLink size={10} aria-hidden="true" />
+          </a>
+        </div>
       </div>
 
       {/* Progress Visualization */}
