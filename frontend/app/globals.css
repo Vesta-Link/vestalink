@@ -195,8 +195,7 @@ textarea:focus-visible {
 }
 
 .network-pill,
-.status-pill,
-.token-label {
+.status-pill {
   min-height: 32px;
   display: inline-flex;
   align-items: center;
@@ -208,6 +207,21 @@ textarea:focus-visible {
   font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
   font-size: 12px;
   white-space: nowrap;
+}
+
+.token-label {
+  display: inline-block;
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 6px 12px;
+  background: var(--background);
+  color: var(--muted);
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-word;
+  max-width: 100%;
 }
 
 .page-shell {
@@ -632,6 +646,7 @@ textarea::placeholder {
 .stream-card {
   display: grid;
   gap: 16px;
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 18px;
@@ -674,12 +689,17 @@ textarea::placeholder {
   margin-top: 4px;
   font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
   font-size: 14px;
+  max-width: 100%;
+}
+
+.address-short {
+  display: none;
 }
 
 .status-pill.active {
-  background: var(--foreground);
-  color: var(--inverse);
-  border-color: var(--foreground);
+  background: var(--accent-soft);
+  color: var(--success);
+  border-color: var(--success);
 }
 
 .status-pill.pending,
@@ -1658,7 +1678,8 @@ textarea::placeholder {
   }
 
   .site-header {
-    position: static;
+    position: relative;
+    z-index: 10;
     gap: 12px;
   }
 
@@ -1699,16 +1720,12 @@ textarea::placeholder {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .stream-card-top,
   .stream-footer,
   .schedule-row {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .network-pill {
-    display: none;
-  }
 
   .language-select-button {
     min-width: 110px;
@@ -1746,6 +1763,14 @@ textarea::placeholder {
   .token-select-button > svg,
   .token-row .network-pill {
     display: none;
+  }
+
+  .address-full {
+    display: none;
+  }
+  
+  .address-short {
+    display: inline;
   }
 }
 
@@ -1801,4 +1826,51 @@ textarea::placeholder {
 .custom-dropdown-item.selected {
   background: var(--surface);
   font-weight: 500;
+}
+
+/* Scroll to Top */
+.scroll-to-top {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 40;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--foreground);
+  color: var(--inverse);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-soft);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(16px);
+  transition: opacity 0.3s ease, transform 0.3s ease, background 160ms ease, color 160ms ease;
+}
+
+.scroll-to-top.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.scroll-to-top:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.15);
+}
+
+.scroll-to-top:active {
+  transform: scale(0.95);
+}
+
+@media (max-width: 640px) {
+  .scroll-to-top {
+    bottom: 20px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+  }
 }

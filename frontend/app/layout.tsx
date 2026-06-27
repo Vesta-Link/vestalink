@@ -4,6 +4,7 @@ import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { SiteHeader } from "@/components/site-header";
 import { ThemeLanguageProvider } from "@/components/preferences-provider";
 import { PrivySolanaProvider } from "@/components/privy-provider";
+import { ScrollToTop } from "@/components/scroll-to-top";
 
 import "./globals.css";
 
@@ -22,26 +23,26 @@ const siteUrl =
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
 export const metadata: Metadata = {
-  title: "Vestalink",
+  title: "VestaLink",
   description: "Simple Solana token vesting streams for teams and recipients.",
   metadataBase: new URL(siteUrl),
   openGraph: {
-    title: "Vestalink",
+    title: "VestaLink",
     description: "Simple Solana token vesting streams for teams and recipients.",
-    siteName: "Vestalink",
+    siteName: "VestaLink",
     images: [
       {
         url: "/assets/vestalink-og.png",
         width: 1536,
         height: 1024,
-        alt: "Vestalink token streaming preview"
+        alt: "VestaLink token streaming preview"
       }
     ],
     type: "website"
   },
   twitter: {
     card: "summary_large_image",
-    title: "Vestalink",
+    title: "VestaLink",
     description: "Simple Solana token vesting streams for teams and recipients.",
     images: ["/assets/vestalink-og.png"]
   }
@@ -55,6 +56,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <PrivySolanaProvider>
             <SiteHeader />
             {children}
+            <ScrollToTop />
           </PrivySolanaProvider>
         </ThemeLanguageProvider>
       </body>

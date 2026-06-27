@@ -10,13 +10,17 @@ import { LANGUAGES, type Language } from "@/lib/i18n";
 
 function useClickOutside(ref: React.RefObject<HTMLElement | null>, handler: () => void) {
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
+    function handleClickOutside(event: MouseEvent | TouchEvent) {
       if (ref.current && !ref.current.contains(event.target as Node)) {
         handler();
       }
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside as EventListener);
+    document.addEventListener("touchstart", handleClickOutside as EventListener);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside as EventListener);
+      document.removeEventListener("touchstart", handleClickOutside as EventListener);
+    };
   }, [ref, handler]);
 }
 
@@ -111,9 +115,9 @@ export function SiteHeader() {
 
   return (
     <header className="site-header">
-      <Link href="/" className="brand" aria-label="Vestalink home">
+      <Link href="/" className="brand" aria-label="VestaLink home">
         <img className="brand-logo" src="/assets/vestalink-logo.png" alt="" aria-hidden="true" />
-        <span>Vestalink</span>
+        <span>VestaLink</span>
       </Link>
       <nav className="nav-links" aria-label="Primary navigation">
         <Link href="/admin">{t.header.admin}</Link>

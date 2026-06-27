@@ -1,7 +1,7 @@
 "use client";
 
 import bs58 from "bs58";
-import { RefreshCw, Plus } from "lucide-react";
+import { RefreshCw, Plus, ExternalLink } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
@@ -21,6 +21,7 @@ import {
   prepareUnsignedTransaction,
   serializeTransactionError,
   formatDateTime,
+  explorerUrl,
   type StreamView
 } from "@/lib/vesting";
 
@@ -209,26 +210,18 @@ function AdminPageInner() {
           const recipientStr = group.length === 1 ? t.admin.groupRecipient : t.admin.groupRecipients;
           const groupTitle = `${formatDateTime(firstStream.account.startTime)} - ${recipientStr.replace("{count}", String(group.length))}`;
           
-          let vestingTypeLabel: string = t.common.linear;
-          if (typeof firstStream.account.vestingType === 'object' && firstStream.account.vestingType !== null) {
-            if ('milestone' in firstStream.account.vestingType && firstStream.account.milestoneCount > 0) {
-              vestingTypeLabel = t.common.milestone;
-            } else if ('cliff' in firstStream.account.vestingType) {
-              vestingTypeLabel = t.common.cliff;
-            }
-          }
-          
           const unlockableStreams = group.filter((stream) => {
             const isMilestoneStream = typeof stream.account.vestingType === 'object' && stream.account.vestingType !== null && 'milestone' in stream.account.vestingType;
             return wallet && publicKey && isMilestoneStream && stream.account.authorityMilestone.equals(publicKey) && stream.account.milestonesReached < stream.account.milestoneCount && stream.status !== "revoked" && stream.status !== "complete";
           });
           const canUnlockGroup = unlockableStreams.length > 0;
           const isSettingGroupMilestone = settingGroupMilestoneId === firstStream.publicKey.toBase58();
+          const firstStreamTokenDisplay = firstStream.name ? `${firstStream.name} (${firstStream.symbol})` : firstStream.symbol;
           
           return (
             <div key={firstStream.publicKey.toBase58()} className="stream-group">
-              <h3 style={{ marginBottom: '16px', fontSize: '0.95em', fontWeight: 600, paddingBottom: '8px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <h3 style={{ marginBottom: '16px', fontSize: '0.95em', fontWeight: 600, paddingBottom: '8px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                   {groupTitle}
                   {canUnlockGroup && (
                     <button
@@ -253,7 +246,20 @@ function AdminPageInner() {
                   )}
                 </span>
                 <span className="token-label" style={{ fontSize: '0.85em', fontWeight: 'normal', color: 'var(--muted)' }}>
-                  {firstStream.symbol} • {vestingTypeLabel}
+                  {firstStream.mint ? (
+                    <a
+                      href={explorerUrl(firstStream.mint.toBase58())}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: "inherit", textDecoration: "none" }}
+                      title="View on Explorer"
+                    >
+                      {firstStreamTokenDisplay}
+                      <ExternalLink size={12} aria-hidden="true" style={{ display: 'inline', verticalAlign: 'baseline', marginLeft: 4, marginRight: 4 }} />
+                    </a>
+                  ) : (
+                    firstStreamTokenDisplay
+                  )}
                 </span>
               </h3>
               <div className="stream-list">
@@ -289,6 +295,7 @@ function AdminPageInner() {
                       action={milestoneAction}
                       onCancel={canCancel ? () => setCancelConfirm(stream) : undefined}
                       isCancelling={isCancelling}
+                      hideTokenName={true}
                     />
                   );
                 })}
@@ -331,7 +338,7 @@ function AdminPageInner() {
       )}
 
       <main className="page-shell single-column">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <p className="eyebrow">{t.admin.eyebrow}</p>
             <h1>{t.admin.title}</h1>

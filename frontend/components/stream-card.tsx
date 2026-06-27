@@ -22,18 +22,25 @@ function formatTimeRemaining(endTime: { toNumber: () => number }, endedLabel: st
   return `${minutes}${units.m}`;
 }
 
+function shortAddress(address: string) {
+  if (address.length <= 12) return address;
+  return `${address.slice(0, 6)}...${address.slice(-6)}`;
+}
+
 export function StreamCard({
   stream,
   mode,
   action,
   onCancel,
-  isCancelling
+  isCancelling,
+  hideTokenName
 }: Readonly<{
   stream: StreamView;
   mode: "admin" | "recipient";
   action?: React.ReactNode;
   onCancel?: () => void;
   isCancelling?: boolean;
+  hideTokenName?: boolean;
 }>) {
   const { t } = usePreferences();
   const { account } = stream;
@@ -52,13 +59,13 @@ export function StreamCard({
   const percent = Math.min(stream.progress, 100);
   const hasClaimable = claimableRaw > 0n;
 
-  let vestingTypeLabel = ` • ${t.common.linear}`;
+  let vestingTypeLabel: string = t.common.linear;
   let isCliff = false;
   if (typeof stream.account.vestingType === 'object' && stream.account.vestingType !== null) {
     if ('milestone' in stream.account.vestingType && stream.account.milestoneCount > 0) {
-      vestingTypeLabel = ` • ${t.common.milestone} (${stream.account.milestonesReached}/${stream.account.milestoneCount})`;
+      vestingTypeLabel = `${t.common.milestone} (${stream.account.milestonesReached}/${stream.account.milestoneCount})`;
     } else if ('cliff' in stream.account.vestingType) {
-      vestingTypeLabel = ` • ${t.common.cliff}`;
+      vestingTypeLabel = t.common.cliff;
       isCliff = true;
     }
   }
@@ -68,16 +75,23 @@ export function StreamCard({
   return (
     <article className="stream-card" style={hasClaimable && mode === "recipient" ? { borderColor: "var(--accent)", boxShadow: "var(--accent-glow)" } : {}}>
       <div className="stream-card-top">
-        <div>
+        <div style={{ minWidth: 0, maxWidth: '100%' }}>
           <p className="label">{mode === "admin" ? t.streamCard.recipient : t.streamCard.funder}</p>
           <a
             className="address-link"
             href={explorerUrl(counterparty.toBase58())}
             target="_blank"
             rel="noreferrer"
+            style={{ maxWidth: '100%' }}
+            title={counterparty.toBase58()}
           >
-            {counterparty.toBase58()}
-            <ExternalLink size={14} aria-hidden="true" />
+            <span className="address-full">
+              {counterparty.toBase58()}
+            </span>
+            <span className="address-short">
+              {shortAddress(counterparty.toBase58())}
+            </span>
+            <ExternalLink size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
           </a>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
@@ -158,19 +172,24 @@ export function StreamCard({
 
       <div className="stream-footer">
         <span className="token-label">
-          {stream.mint ? (
-            <a
-              href={explorerUrl(stream.mint.toBase58())}
-              target="_blank"
-              rel="noreferrer"
-              style={{ color: "inherit", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, marginRight: 4 }}
-              title="View on Explorer"
-            >
-              {tokenDisplay}
-              <ExternalLink size={12} aria-hidden="true" />
-            </a>
-          ) : (
-            tokenDisplay
+          {!hideTokenName && (
+            <>
+              {stream.mint ? (
+                <a
+                  href={explorerUrl(stream.mint.toBase58())}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: "inherit", textDecoration: "none" }}
+                  title="View on Explorer"
+                >
+                  {tokenDisplay}
+                  <ExternalLink size={12} aria-hidden="true" style={{ display: 'inline', verticalAlign: 'baseline', marginLeft: 4, marginRight: 4 }} />
+                </a>
+              ) : (
+                tokenDisplay
+              )}
+              {" • "}
+            </>
           )}
           {vestingTypeLabel}
         </span>
