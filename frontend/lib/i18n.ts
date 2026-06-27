@@ -14,6 +14,7 @@ export const dictionaries = {
       admin: "Admin",
       recipient: "Recipient",
       devnet: "Devnet",
+      mainnetComingSoon: "Mainnet (Coming soon)",
       toggleTheme: "Toggle theme",
       language: "Language"
     },
@@ -248,6 +249,7 @@ export const dictionaries = {
       admin: "Admin",
       recipient: "Penerima",
       devnet: "Devnet",
+      mainnetComingSoon: "Mainnet (Segera hadir)",
       toggleTheme: "Ganti tema",
       language: "Bahasa"
     },
@@ -482,6 +484,7 @@ export const dictionaries = {
       admin: "管理",
       recipient: "领取",
       devnet: "开发网",
+      mainnetComingSoon: "主网 (敬请期待)",
       toggleTheme: "切换主题",
       language: "语言"
     },
