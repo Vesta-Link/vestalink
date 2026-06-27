@@ -2,7 +2,7 @@
 
 Token distribution protocol on Solana that automates vesting, streaming, and scheduled token distribution.
 
-> **Beta phase** — This project contains a fully implemented Anchor program supporting Linear, Cliff, and Milestone-based vesting schedules.
+> **Beta phase** — This project contains a fully implemented Anchor program supporting Linear, Cliff, and Milestone-based vesting schedules. It also includes a modern Next.js frontend with bulk stream creation, admin fee processing, and multi-language support.
 
 ## Monorepo Structure
 
@@ -160,6 +160,8 @@ The Next.js application is located in the `frontend/` directory.
 
 ```bash
 cd frontend
+cp .env.example .env.local
+# Set NEXT_PUBLIC_ADMIN_ADDRESS to your devnet wallet or local test key
 npm run dev
 ```
 
@@ -180,7 +182,7 @@ Creates a new vesting schedule and locks tokens in a program-derived vault.
   - `cliff_time` (`i64`): Unix timestamp for the cliff (if applicable).
   - `milestone_count` (`u8`): Total number of milestones (if applicable).
   - `nonce` (`u64`): Unique ID to allow multiple streams between the same funder and recipient.
-- **Expected Behavior**: Initializes a `VestingState` PDA. Transfers `total_amount` of tokens from the funder's token account to the vesting PDA's token vault.
+- **Expected Behavior**: Initializes a `VestingState` PDA. Transfers `total_amount` of tokens from the funder's token account to the vesting PDA's token vault, while processing a protocol fee (e.g., 0.5%) sent to the admin address.
 - **Error Codes**: `InvalidAmount`, `InvalidTimeRange`, `CliffTimeExceedsEndTime`, `MilestoneCountZero`, `InvalidVaultOwner`, `InvalidTokenMint`, `InvalidTokenOwner`.
 - **Example Usage**:
   ```typescript
@@ -198,8 +200,13 @@ Creates a new vesting schedule and locks tokens in a program-derived vault.
     funder: funderPublicKey,
     recipient: recipientPublicKey,
     funderTokenAccount: funderTokenAccountAddress,
+    mint: tokenMintAddress,
     vestingTokenAccount: vaultTokenAccountAddress,
+    globalConfig: globalConfigPda,
+    adminAddress: adminPublicKey,
+    adminTokenAccount: adminTokenAccountAddress,
     tokenProgram: TOKEN_PROGRAM_ID,
+    associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
     systemProgram: anchor.web3.SystemProgram.programId,
   })
   .rpc();
@@ -365,6 +372,17 @@ const funderTokenAccount = getAssociatedTokenAddressSync(
   tokenMint,
   funderPublicKey
 );
+
+// Derive admin fee accounts
+const adminPublicKey = new anchor.web3.PublicKey("...");
+const adminTokenAccount = getAssociatedTokenAddressSync(
+  tokenMint,
+  adminPublicKey
+);
+const [globalConfigPda] = anchor.web3.PublicKey.findProgramAddressSync(
+  [Buffer.from("global_config")],
+  program.programId
+);
 ```
 
 ### Step 4: Create the Stream
@@ -418,8 +436,13 @@ const txHash = await program.methods.createStream({
   funder: funderPublicKey,
   recipient: recipientPublicKey,
   funderTokenAccount: funderTokenAccount,
+  mint: tokenMint,
   vestingTokenAccount: vaultTokenAccount,
+  globalConfig: globalConfigPda,
+  adminAddress: adminPublicKey,
+  adminTokenAccount: adminTokenAccount,
   tokenProgram: TOKEN_PROGRAM_ID,
+  associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
   systemProgram: anchor.web3.SystemProgram.programId,
 })
 .preInstructions(preInstructions)
